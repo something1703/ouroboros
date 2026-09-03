@@ -1,0 +1,228 @@
+# MCP Toolbox for Databases config. Format verified 2026-09-03 directly against the
+# genai-toolbox README (raw.githubusercontent.com/googleapis/genai-toolbox/main/README.md)
+# and Google's "Agentic RAG with ADK, MCP Toolbox, and Cloud SQL" codelab — not guessed.
+#
+# Two consumers (ARCHITECTURE.md §2.2): ADK agents get ledger_read + ledger_write;
+# Parallel Task runs get parallel_readonly (== ledger_read) only, via the token-protected
+# public proxy added in Phase 5.6 — never ledger_write.
+#
+# Local vs Cloud Run: one `postgres`-type source, DB_HOST/DB_PASSWORD differ by
+# environment (local: docker-compose postgres, password auth; Cloud Run: the Cloud SQL
+# private IP via the Serverless VPC Access connector, same password auth — see
+# docs/DECISIONS.md #022 on why this uses password auth in both places rather than the
+# `cloud-sql-postgres` source kind's IAM-auth mode, which needs an IAM DB user we haven't
+# provisioned yet).
+
+kind: source
+name: ouroboros_pg
+type: postgres
+host: ${TOOLBOX_DB_HOST}
+port: ${TOOLBOX_DB_PORT}
+database: ${TOOLBOX_DB_NAME}
+user: ${TOOLBOX_DB_USER}
+password: ${TOOLBOX_DB_PASSWORD}
+
+---
+# --- Reads ---
+
+kind: tool
+name: get_claim
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Get one claim by id, with its latest evidence cycle and current risk assessment.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim_id to look up.
+statement: |
+  SELECT
+    c.claim_id, c.project_id, c.studio_id, c.kind, c.category, c.entity_text,
+    c.normalized_text, c.claim_text, c.language, c.source, c.jurisdictions,
+    c.priority, c.status, c.created_at, c.updated_at,
+    e.evidence_id, e.cycle, e.method, e.output AS evidence_output,
+    e.overall_confidence, e.created_at AS evidence_created_at,
+    r.level AS risk_level, r.score AS risk_score, r.rationale AS risk_rationale
+  FROM claims c
+  LEFT JOIN LATERAL (
+    SELECT * FROM evidence WHERE evidence.claim_id = c.claim_id ORDER BY cycle DESC LIMIT 1
+  ) e ON true
+  LEFT JOIN risk r ON r.claim_id = c.claim_id
+  WHERE c.claim_id = $1;
+
+---
+kind: tool
+name: list_claims
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  List claims for a project, optionally filtered by status and/or category.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to list claims for.
+  - name: status
+    type: string
+    description: "Filter by status (pending, triaged, verifying, verified, escalated, error, stale). Pass an empty string for no filter."
+  - name: category
+    type: string
+    description: "Filter by category (music, brand, person, location, artwork, quote, event, statistic, attribution, archival, identity). Pass an empty string for no filter."
+  - name: result_limit
+    type: integer
+    description: Maximum rows to return.
+    default: 50
+statement: |
+  SELECT claim_id, project_id, category, entity_text, claim_text, priority, status, created_at
+  FROM claims
+  WHERE project_id = $1
+    AND ($2 = '' OR status = $2)
+    AND ($3 = '' OR category = $3)
+  ORDER BY created_at DESC
+  LIMIT $4;
+
+---
+kind: tool
+name: get_prior_decisions
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Studio memory: prior clearance decisions for an entity, most recent first. Used to
+  skip re-research when a recent decision already exists (ADK_AGENTS.md §2.1).
+parameters:
+  - name: studio_id
+    type: string
+    description: The studio to look up memory for.
+  - name: entity_normalized
+    type: string
+    description: The normalized entity name (packages.claims.normalize.normalize_text output).
+statement: |
+  SELECT id, category, entity_normalized, decision, note, decided_at
+  FROM prior_decisions
+  WHERE studio_id = $1 AND entity_normalized = $2
+  ORDER BY decided_at DESC;
+
+---
+kind: tool
+name: get_project
+type: postgres-sql
+source: ouroboros_pg
+description: Get one project by id.
+parameters:
+  - name: project_id
+    type: string
+    description: The project_id to look up.
+statement: |
+  SELECT project_id, studio_id, title, release_date, shooting_countries,
+         distribution_territories, budget_cap_usd, created_at
+  FROM projects
+  WHERE project_id = $1;
+
+---
+# --- Writes (ledger_write only — never exposed to Parallel) ---
+
+kind: tool
+name: record_evidence
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Insert a new evidence cycle for a claim. `expected_cycle` must equal
+  (current max cycle for this claim) + 1 — the insert is a no-op (0 rows) if it
+  doesn't, guarding against writing evidence out of order.
+parameters:
+  - name: evidence_id
+    type: string
+    description: ULID for the new evidence row.
+  - name: claim_id
+    type: string
+    description: The claim this evidence is for.
+  - name: expected_cycle
+    type: integer
+    description: The cycle number this evidence should land as (current max + 1).
+  - name: method
+    type: string
+    description: "One of: search, task, responses, entity_search, extract, grounding."
+  - name: output_json
+    type: string
+    description: The structured Task/Responses output, as a JSON string.
+  - name: basis_json
+    type: string
+    description: The FieldBasis array, as a JSON string.
+  - name: overall_confidence
+    type: string
+    description: "One of: high, medium, low, unknown."
+  - name: cost_usd
+    type: float
+    description: Cost of this verification cycle in USD.
+statement: |
+  WITH next_cycle AS (
+    SELECT COALESCE(MAX(cycle), 0) + 1 AS n FROM evidence WHERE evidence.claim_id = $2
+  )
+  INSERT INTO evidence (evidence_id, claim_id, cycle, method, output, basis, overall_confidence, cost_usd, created_at)
+  SELECT $1, $2, next_cycle.n, $4, $5::jsonb, $6::jsonb, $7, $8, now()
+  FROM next_cycle
+  WHERE next_cycle.n = $3
+  RETURNING evidence_id, cycle;
+
+---
+kind: tool
+name: set_status
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Update a claim's status and append a verification_history entry recording the transition.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to update.
+  - name: new_status
+    type: string
+    description: "One of: pending, triaged, verifying, verified, escalated, error, stale."
+  - name: actor
+    type: string
+    description: "One of: ingest, agent, monitor, reverify_worker, human."
+  - name: note
+    type: string
+    description: Human-readable note explaining the transition.
+  - name: ref_json
+    type: string
+    description: "JSON object with routing context, e.g. {\"run_id\": \"...\"}."
+  - name: event_id
+    type: string
+    description: ULID for the new verification_history row.
+statement: |
+  WITH old AS (
+    SELECT status FROM claims WHERE claim_id = $1
+  ),
+  updated AS (
+    UPDATE claims SET status = $2, updated_at = now() WHERE claim_id = $1 RETURNING claim_id
+  )
+  INSERT INTO verification_history (event_id, claim_id, at, actor, from_status, to_status, note, ref)
+  SELECT $6, $1, now(), $3, old.status, $2, $4, $5::jsonb FROM old, updated
+  RETURNING event_id;
+
+---
+# --- Toolsets ---
+
+kind: toolset
+name: ledger_read
+tools:
+  - get_claim
+  - list_claims
+  - get_prior_decisions
+  - get_project
+
+---
+kind: toolset
+name: ledger_write
+tools:
+  - record_evidence
+  - set_status
+
+---
+# Read-only subset exposed to Parallel Task runs (Phase 5.6) — never ledger_write.
+kind: toolset
+name: parallel_readonly
+tools:
+  - get_claim
+  - list_claims
+  - get_prior_decisions

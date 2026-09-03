@@ -79,9 +79,11 @@ check_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
+# Note: disallow_any_explicit is deliberately NOT set here (it isn't part of
+# mypy's own --strict) — it fights Pydantic's mypy plugin, which synthesizes
+# Any-typed code at every `class X(BaseModel):` line.
 module = "packages.*"
 strict = true
-disallow_any_explicit = true
 
 [[tool.mypy.overrides]]
 module = ["vcr.*", "toolbox_core.*"]

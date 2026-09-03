@@ -77,6 +77,26 @@ module "secrets" {
   depends_on = [module.project_services]
 }
 
+module "cloud_sql" {
+  source                     = "./modules/cloud_sql"
+  project_id                 = var.project_id
+  region                     = var.region
+  env                        = var.env
+  vpc_network_id             = module.network.network_id
+  private_service_connection = module.network.private_service_connection
+  db_password                = module.secrets.db_password
+
+  depends_on = [module.network, module.secrets]
+}
+
+module "bigquery" {
+  source     = "./modules/bigquery"
+  project_id = var.project_id
+  region     = var.region
+
+  depends_on = [module.project_services]
+}
+
 resource "google_firestore_database" "default" {
   project     = var.project_id
   name        = "(default)"

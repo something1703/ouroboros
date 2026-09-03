@@ -1,0 +1,19 @@
+# Demo project metadata (00_REQUIREMENTS_FROM_USER.md §B3).
+#
+# DRAFT — the agent picked these values so Phase 2+ has something to seed and demo
+# against; none of this is a creative decision the human was asked to make yet. Edit
+# freely (film title, genre, dates, territories) — nothing downstream hard-codes these
+# values, they're only read from this file by scripts/seed.py.
+#
+# release_date is set ~30 days after the hackathon deadline (10 Sept 2026) specifically
+# so the Monitor cadence's "coil tightening" (1w -> 1d -> 1h as release approaches, see
+# config/parallel.py: frequency_for) is visibly active during judging week.
+
+project_id: demo
+studio_id: studio-demo
+title: "The Long Take"
+genre: "Drama / Thriller"
+release_date: 2026-10-10
+shooting_countries: [in, us]
+distribution_territories: [in, us, gb, de, jp]
+budget_cap_usd: 10.00

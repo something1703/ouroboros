@@ -78,7 +78,8 @@ locals {
       "roles/datastore.owner",
       "roles/run.admin",
       "roles/artifactregistry.writer",
-      "roles/iam.serviceAccountUser",
+      "roles/iam.serviceAccountUser",  # actAs — deploy Cloud Run with --service-account=X
+      "roles/iam.serviceAccountAdmin", # getIamPolicy/setIamPolicy ON service accounts — needed to manage the WIF binding on sa-ci-deploy itself
       "roles/cloudbuild.builds.editor",
       "roles/aiplatform.user",
       "roles/storage.admin",

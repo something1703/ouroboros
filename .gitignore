@@ -34,9 +34,8 @@ node_modules/
 credentials*.json
 service-account*.json
 
-# Terraform
+# Terraform (the provider lock file IS committed — it pins versions for reproducibility)
 infra/**/.terraform/
-infra/**/.terraform.lock.hcl
 infra/**/*.tfstate
 infra/**/*.tfstate.*
 infra/**/*.tfplan

@@ -60,7 +60,7 @@ locals {
     ]
     # CI/CD via Workload Identity Federation — no JSON keys. Scoped to build+deploy,
     # not data access (sa-ci never touches the ledger, Firestore, or Parallel secrets).
-    sa-ci = [
+    sa-ci-deploy = [
       "roles/run.admin",
       "roles/artifactregistry.writer",
       "roles/iam.serviceAccountUser",
@@ -121,7 +121,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 }
 
 resource "google_service_account_iam_member" "wif_binding" {
-  service_account_id = google_service_account.sa["sa-ci"].name
+  service_account_id = google_service_account.sa["sa-ci-deploy"].name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }

@@ -83,6 +83,11 @@ SUPPORTED_LOCATIONS: Final[frozenset[str]] = frozenset(
 assert "uk" not in SUPPORTED_LOCATIONS, "use 'gb', Parallel does not recognize 'uk'"
 
 # --- Search --------------------------------------------------------------
+# Verified live against POST https://api.parallel.ai/v1/search on 2026-09-03
+# (mode='fast', real 200 response — see docs/DECISIONS.md #018). Do not
+# confuse with /v1beta/search, an unrelated beta endpoint with a different
+# mode enum ('agentic'/'fast'/'one-shot') — that path was a mistaken guess
+# during verification, not part of this plan.
 SearchMode = Literal["turbo", "fast", "basic", "advanced"]
 SEARCH_MODE_DEFAULT: Final[SearchMode] = "fast"
 

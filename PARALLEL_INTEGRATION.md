@@ -56,17 +56,39 @@ The meter records a `cost_events` row per call *before* the call (estimated) and
 ## 4. Per-API contracts
 
 ### 4.1 Search
+
+**Corrected 2026-09-03** against the live `POST https://api.parallel.ai/v1/search` endpoint
+(confirmed both by a real 422 validation error and by the installed `parallel-web` SDK's
+type signature) — the wrapper's *public* function signature stays as originally planned,
+but its *implementation* must nest fields correctly:
+
 ```python
-def search(objective: str, queries: list[str], *, mode: Literal["turbo","fast","basic","advanced"]="fast",
+def search(objective: str | None, queries: list[str], *, mode: Literal["turbo","fast","basic","advanced"]="fast",
            location: str|None=None, exclude_domains: list[str]|None=None, after_date: date|None=None,
            max_results: int=10, session_id: str|None=None, claim_id: str|None=None) -> SearchResult
 ```
-- Always send `objective` **and** `search_queries` (1–3 concise queries).
-- `location` only if in the supported list (`config/parallel.py: SUPPORTED_LOCATIONS`, 37 codes; `gb` not `uk`). Otherwise omit and rely on objective wording.
+maps onto the real request body as:
+```json
+{
+  "objective": "...",              // optional — NOT required, contrary to the original plan
+  "search_queries": ["..."],       // required, 3-6 words each
+  "mode": "fast",
+  "session_id": "...",
+  "advanced_settings": {
+    "max_results": 10,
+    "location": "gb",
+    "source_policy": {"exclude_domains": [...], "after_date": "YYYY-MM-DD"}
+  }
+}
+```
+- `location`, `max_results` live under `advanced_settings`; `exclude_domains`/`include_domains`/`after_date` live under `advanced_settings.source_policy` — **not** top-level fields as earlier drafts of this doc assumed.
+- Always send **`search_queries`** (1–3 concise, 3–6 word queries — required). `objective` is optional but send it anyway; it materially improves result relevance.
+- `location` only if in the supported list (`config/parallel.py: SUPPORTED_LOCATIONS`; `gb` not `uk`). Otherwise omit and rely on objective wording.
 - Never set `include_domains` by default. `exclude_domains` default: `["pinterest.com","facebook.com","instagram.com","tiktok.com"]` for legal categories (noise), none for factual.
 - `after_date` used only by re-verification (`since last cycle`) and developing-story checks.
 - Store `session_id` in the claim's current cycle so Search + Extract calls for one claim group together.
 - Response handling: keep `url, title, publish_date, excerpts[:3]`; Model-Armor-screen excerpts before they reach any prompt.
+- Mode enum verified live: `turbo`, `fast`, `basic`, `advanced` (default `advanced` when omitted) — the plan's original names were correct. Do not confuse with `POST /v1beta/search`, an unrelated beta endpoint with a different mode enum (`agentic`/`fast`/`one-shot`) discovered by accident during verification — it is not part of this integration.
 
 ### 4.2 Task
 ```python

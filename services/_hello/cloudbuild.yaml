@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - services/_hello/Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/hello:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/hello:latest

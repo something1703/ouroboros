@@ -19,5 +19,11 @@ def normalize_text(text: str) -> str:
     # Strip Unicode punctuation (category starting with "P"); diacritics live in the
     # "M" (Mark) categories and are untouched, so accented text stays distinguishable.
     no_punct = "".join(ch for ch in lowered if not unicodedata.category(ch).startswith("P"))
-    collapsed = _WHITESPACE_RE.sub(" ", no_punct)
+    # Removing punctuation can create a *new* adjacency between a base letter and a
+    # combining mark that wasn't adjacent before (e.g. "C" ":" combining-cedilla ->
+    # strip ":" -> "C"+combining-cedilla, now composable but not yet composed) — found
+    # by hypothesis. Re-running NFKC composes any such sequence; NFKC is itself
+    # idempotent, so this can never un-normalize an already-composed string.
+    composed = unicodedata.normalize("NFKC", no_punct)
+    collapsed = _WHITESPACE_RE.sub(" ", composed)
     return collapsed.strip()

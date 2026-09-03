@@ -12,6 +12,8 @@ locals {
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      "roles/modelarmor.user",
+      "roles/eventarc.eventReceiver",
     ]
     sa-webhook = [
       "roles/pubsub.publisher",
@@ -39,6 +41,10 @@ locals {
       "roles/pubsub.publisher",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # A signed upload URL is only valid for what the signing identity can itself do
+      # (PHASE_03.md §3.6) — needed for the actual `PUT` the client performs against it,
+      # separate from roles/iam.serviceAccountTokenCreator below (which lets it *sign*).
+      "roles/storage.objectCreator",
     ]
     sa-toolbox = [
       "roles/cloudsql.client",
@@ -108,6 +114,16 @@ resource "google_project_iam_member" "bindings" {
   project = var.project_id
   role    = each.value.role
   member  = "serviceAccount:${google_service_account.sa[each.value.sa].email}"
+}
+
+# sa-dashboard-api signs GCS upload URLs (PHASE_03.md §3.6) with no private key on disk —
+# generate_signed_url() falls back to the IAM Credentials API's signBlob when given
+# service_account_email + access_token (python-storage's _sign_message), which needs
+# Service Account Token Creator granted to the SA *on itself* (self-impersonation).
+resource "google_service_account_iam_member" "dashboard_api_signs_urls" {
+  service_account_id = google_service_account.sa["sa-dashboard-api"].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.sa["sa-dashboard-api"].email}"
 }
 
 # --- Workload Identity Federation for GitHub Actions (sa-ci), no JSON keys ---

@@ -97,6 +97,34 @@ module "bigquery" {
   depends_on = [module.project_services]
 }
 
+module "model_armor" {
+  source     = "./modules/model_armor"
+  project_id = var.project_id
+  region     = var.region
+
+  depends_on = [module.project_services]
+}
+
+module "pubsub" {
+  source     = "./modules/pubsub"
+  project_id = var.project_id
+
+  depends_on = [module.project_services]
+}
+
+# See infra/modules/eventarc/main.tf's header comment: this needs the `ingest` Cloud Run
+# service to already exist, which deploy.yml guarantees by deploying services before
+# running `terraform apply`.
+module "eventarc" {
+  source                       = "./modules/eventarc"
+  project_id                   = var.project_id
+  region                       = var.region
+  intake_bucket                = module.storage.intake_bucket
+  ingest_service_account_email = module.iam.service_account_emails["sa-ingest"]
+
+  depends_on = [module.storage, module.iam]
+}
+
 resource "google_firestore_database" "default" {
   project     = var.project_id
   name        = "(default)"

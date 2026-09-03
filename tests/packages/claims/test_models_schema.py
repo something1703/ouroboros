@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from packages.claims.enums import Confidence, RiskLevel, VerificationStatus
 from packages.claims.models import (
+    Asset,
     Citation,
     Evidence,
     FieldBasis,
@@ -14,6 +15,28 @@ from packages.claims.models import (
 )
 
 _NOW = datetime(2026, 9, 3, tzinfo=UTC)
+
+
+def test_asset_compute_id_is_deterministic() -> None:
+    args = {
+        "bucket": "ouroboros-507503-intake-dev",
+        "name": "scripts/demo/x.pdf",
+        "generation": "1",
+    }
+    assert Asset.compute_id(**args) == Asset.compute_id(**args)
+
+
+def test_asset_compute_id_varies_with_generation() -> None:
+    """The whole point of keying on generation (PHASE_03.md §3.1, docs/DECISIONS.md): a
+    redelivery of the *same* object.finalized event must collide (same asset_id, so
+    services/ingest's idempotency check skips it), but a genuinely new upload to the
+    same path (a new generation) must not be mistaken for the old one."""
+    same_generation = Asset.compute_id(bucket="b", name="scripts/demo/x.pdf", generation="1")
+    redelivered = Asset.compute_id(bucket="b", name="scripts/demo/x.pdf", generation="1")
+    new_upload = Asset.compute_id(bucket="b", name="scripts/demo/x.pdf", generation="2")
+
+    assert same_generation == redelivered
+    assert same_generation != new_upload
 
 
 def test_citation_requires_url() -> None:

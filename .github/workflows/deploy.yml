@@ -11,10 +11,62 @@ permissions:
 env:
   GOOGLE_CLOUD_PROJECT: ouroboros-507503
   OUROBOROS_REGION: us-central1
+  # Stable since Phase 1/2 — not re-read from `terraform output` here because
+  # deploy-services runs *before* terraform-apply (see below).
+  DB_HOST: 10.175.0.3
+  VPC_CONNECTOR: ouroboros-dev-conn
+  INTAKE_BUCKET: ouroboros-507503-intake-dev
 
 jobs:
+  # Runs *before* terraform-apply: an Eventarc trigger's `destination.cloud_run_service`
+  # (infra/modules/eventarc) and any `google_cloud_run_v2_service_iam_member` binding on
+  # a service both fail if that Cloud Run service doesn't exist yet — found live
+  # deploying `ingest` for the first time (docs/DECISIONS.md). Every service account,
+  # secret, and network path a service needs already exists from an earlier phase's
+  # apply, so deploying here first and reconciling infra second is safe.
+  deploy-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/492372502792/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: sa-ci-deploy@ouroboros-507503.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build + deploy ingest
+        run: |
+          gcloud builds submit --config=services/ingest/cloudbuild.yaml .
+          gcloud run deploy ingest --region="$OUROBOROS_REGION" \
+            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/ingest:latest" \
+            --service-account="sa-ingest@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app" \
+            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
+            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
+            --vpc-egress=private-ranges-only --ingress=internal
+
+      - name: Build + deploy dashboard-api
+        run: |
+          gcloud builds submit --config=services/dashboard_api/cloudbuild.yaml .
+          gcloud run deploy dashboard-api --region="$OUROBOROS_REGION" \
+            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/dashboard-api:latest" \
+            --service-account="sa-dashboard-api@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET}" \
+            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
+            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
+            --vpc-egress=private-ranges-only
+
+      # TODO (Phase 3.3+): webhook_receiver, reverify_worker as they get real code.
+      # TODO (Phase 5.5): invoke agents/deploy/deploy.py against Agent Engine,
+      # once the ADK app exists.
+
   terraform-apply:
     runs-on: ubuntu-latest
+    needs: deploy-services
     steps:
       - uses: actions/checkout@v4
 
@@ -36,14 +88,3 @@ jobs:
       - name: terraform apply (dev)
         working-directory: infra
         run: terraform apply -var-file=environments/dev.tfvars -auto-approve
-
-  # TODO (Phase 3+): build each services/* image via Cloud Build and
-  # `gcloud run deploy`, once those services have real application code.
-  # TODO (Phase 5.5): invoke agents/deploy/deploy.py against Agent Engine,
-  # once the ADK app exists.
-  deploy-services:
-    runs-on: ubuntu-latest
-    needs: terraform-apply
-    steps:
-      - name: placeholder
-        run: echo "TODO — no services have application code yet (Phase 3+)"

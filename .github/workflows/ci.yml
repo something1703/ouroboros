@@ -58,6 +58,7 @@ jobs:
       - name: Type check (mypy)
         run: |
           uv run mypy --strict packages
+          uv run mypy --strict services
           uv run mypy config
 
       - name: Test (offline — recorded fixtures only)

@@ -1,0 +1,53 @@
+# Hand-labelled entities for fixtures/scripts/sample_en.pdf, for the Phase 3.2
+# recall test (PHASE_03.md §3.2: "≥ 90% recall against a hand-labelled list of
+# 30 known entities"). This is a deliberately compact synthetic script (5 pages,
+# not the plan's ideal 60-120), so the label list is proportionally smaller —
+# see docs/DECISIONS.md for why a shorter synthetic fixture was used instead of
+# blocking Phase 3 on the human supplying a real screenplay.
+#
+# Every entity below is real and should be extracted. The script also contains
+# deliberate distractors that must NOT appear here and must NOT be extracted:
+# "Cafe Lumiere" (explicitly fictional in the text), and the fictional
+# characters Maya Chen, Priya Sharma, Albert Weiss, the Sound Engineer.
+
+entities:
+  - entity_text: "Bohemian Rhapsody"
+    category: music
+  - entity_text: "Happy Birthday to You"
+    category: music
+  - entity_text: "Starbucks"
+    category: brand
+  - entity_text: "Coca-Cola"
+    category: brand
+  - entity_text: "Apple"
+    category: brand
+  - entity_text: "Nike"
+    category: brand
+  - entity_text: "Tesla"
+    category: brand
+  - entity_text: "Ford"
+    category: brand
+  - entity_text: "Tata Motors"
+    category: brand
+  - entity_text: "Barack Obama"
+    category: person
+  - entity_text: "Serena Williams"
+    category: person
+  - entity_text: "Albert Einstein"
+    category: person
+  - entity_text: "Golden Gate Bridge"
+    category: location
+  - entity_text: "Times Square"
+    category: location
+  - entity_text: "The Starry Night"
+    category: artwork
+  - entity_text: "Mona Lisa"
+    category: artwork
+  - entity_text: "To be, or not to be"
+    category: quote
+
+fictional_distractors_must_not_appear:
+  - "Cafe Lumiere"
+  - "Maya Chen"
+  - "Priya Sharma"
+  - "Albert Weiss"

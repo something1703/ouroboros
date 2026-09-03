@@ -250,6 +250,21 @@ class ClaimRepo:
             raise NotFound("claim", claim_id)
         claim_row.status = status.value
 
+    @staticmethod
+    def count_by_status(session: Session, project_id: str) -> dict[str, int]:
+        """Aggregate counts for `Projector.project_summary` — used by ingest after every
+        run and, later, by any dashboard refresh. A `select ... group by` rather than
+        `list_by_project`, which caps at `limit` and isn't meant for full-project counts."""
+        stmt = (
+            select(ClaimRow.status, func.count())
+            .where(ClaimRow.project_id == project_id)
+            .group_by(ClaimRow.status)
+        )
+        # dict() over the raw Row sequence fails mypy --strict (Row isn't a plain
+        # tuple as far as the type checker's concerned); this comprehension satisfies
+        # both ruff and mypy.
+        return {status: count for status, count in session.execute(stmt).all()}  # noqa: C416
+
 
 def _evidence_from_row(row: EvidenceRow) -> Evidence:
     return Evidence(

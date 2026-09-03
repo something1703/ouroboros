@@ -30,6 +30,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "PyYAML",
     "python-ulid",
+    "pypdf",
+    "google-cloud-modelarmor>=0.7.1",
 ]
 
 [dependency-groups]
@@ -66,6 +68,12 @@ ignore = ["E501"]
 [tool.ruff.lint.isort]
 known-first-party = ["config", "packages", "services", "agents"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's own idiom for query/path params: `Query(default=...)` /
+# `Depends(...)` as an argument default is how FastAPI discovers them, not the
+# eager-evaluation bug B008 otherwise flags.
+extend-immutable-calls = ["fastapi.Query", "fastapi.Depends", "fastapi.Path"]
+
 [tool.ruff.format]
 quote-style = "double"
 
@@ -86,7 +94,15 @@ module = "packages.*"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["vcr.*", "toolbox_core.*"]
+module = [
+    "vcr.*",
+    "toolbox_core.*",
+    "google.cloud",
+    "google.cloud.storage",
+    "google.cloud.storage.*",
+    "google.cloud.pubsub_v1",
+    "google.cloud.pubsub_v1.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

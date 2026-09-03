@@ -9,6 +9,7 @@ lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy --strict packages
+	uv run mypy --strict services
 	uv run mypy config
 
 fmt:
@@ -19,8 +20,8 @@ test: ## brings up postgres for the ledger integration tests (PHASE_02.md §2.2)
 	docker compose up -d postgres
 	DB_HOST=localhost DB_NAME=ouroboros DB_USER=app DB_PASSWORD=localdev uv run pytest -m "not live"
 
-test-live:
-	uv run pytest -m live
+test-live: ## needs .env populated (GOOGLE_CLOUD_PROJECT, INTAKE_BUCKET at minimum) -- never runs in CI
+	uv run --env-file .env pytest -m live
 
 run-local: ## Phase 1.4 — today this is just postgres; see docs/DEV.md for what's still commented out
 	docker compose up -d postgres

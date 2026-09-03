@@ -18,11 +18,12 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 _CONFIGURED = False
+_PROVIDER: TracerProvider | None = None
 
 
 def configure_tracing(*, service: str) -> None:
     """Call once at process start. Exports to Cloud Trace when a GCP project is configured, else to stdout."""
-    global _CONFIGURED
+    global _CONFIGURED, _PROVIDER
     if _CONFIGURED:
         return
 
@@ -40,7 +41,22 @@ def configure_tracing(*, service: str) -> None:
 
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
+    _PROVIDER = provider
     _CONFIGURED = True
+
+
+def flush_tracing() -> None:
+    """Force-export any buffered spans now, synchronously.
+
+    Cloud Run's default request-based billing freezes a container's CPU between
+    requests (docs.cloud.google.com/run/docs/configuring/cpu-allocation, verified
+    2026-09-03) — found live: `BatchSpanProcessor`'s periodic background export thread
+    never got to run after a response was sent, so traces from services/ingest never
+    reached Cloud Trace at all. Call this at the end of a request handler, while CPU is
+    still allocated, instead of paying for always-on CPU just to keep that thread alive.
+    """
+    if _PROVIDER is not None:
+        _PROVIDER.force_flush()
 
 
 def instrument_fastapi(app: FastAPI) -> None:

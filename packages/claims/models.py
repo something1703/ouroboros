@@ -59,6 +59,21 @@ class Asset(BaseModel):
     duration_ms: int | None = None
     ingested_at: datetime | None = None
 
+    @staticmethod
+    def compute_id(*, bucket: str, name: str, generation: str) -> str:
+        """Deterministic asset_id from the GCS object identity that triggered ingest.
+
+        sha256(bucket|name|generation)[:24]
+
+        `generation` (not just bucket/name) is the idempotency key PHASE_03.md §3.1
+        calls for: Eventarc/Pub/Sub delivery is at-least-once, so the same
+        `object.finalized` CloudEvent can arrive twice for the same underlying upload —
+        this makes re-processing it a no-op via ClaimRepo.upsert's primary-key semantics,
+        without needing separate bucket/name/generation columns on `assets`.
+        """
+        raw = f"{bucket}|{name}|{generation}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
 
 class SourceRef(BaseModel):
     """Where in the source asset a claim came from — exactly one of the script/video field groups is set."""

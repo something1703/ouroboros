@@ -58,9 +58,24 @@ locals {
       "roles/run.invoker",
       "roles/logging.logWriter",
     ]
-    # CI/CD via Workload Identity Federation — no JSON keys. Scoped to build+deploy,
-    # not data access (sa-ci never touches the ledger, Firestore, or Parallel secrets).
+    # CI/CD via Workload Identity Federation — no JSON keys. `deploy.yml` runs
+    # `terraform apply` against the *entire* infra/ config, so this needs
+    # read/write on every resource type that config manages, not just
+    # build+deploy actions. The first live run hit real 403s (see
+    # docs/DECISIONS.md #019) reading/writing IAM policy bindings, the VPC
+    # network, the WIF pool itself, Secret Manager, and Firestore — the
+    # *.projectIamAdmin/*.Admin roles below fix that precisely, scoped to
+    # exactly the resource types infra/ touches (00_REQUIREMENTS_FROM_USER.md
+    # §A2 already called out needing Project IAM Admin for whoever runs
+    # Terraform). Add the matching admin role here whenever a new Terraform
+    # resource type is introduced in a later phase.
     sa-ci-deploy = [
+      "roles/resourcemanager.projectIamAdmin",
+      "roles/iam.workloadIdentityPoolAdmin",
+      "roles/compute.networkAdmin",
+      "roles/vpcaccess.admin",
+      "roles/secretmanager.admin",
+      "roles/datastore.owner",
       "roles/run.admin",
       "roles/artifactregistry.writer",
       "roles/iam.serviceAccountUser",

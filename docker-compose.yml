@@ -1,0 +1,65 @@
+# Local dev stack. Only `postgres` is real today — everything else here is
+# genuinely runnable, but the services it builds don't exist as application
+# code yet. Uncomment each block as its phase lands (Phase 2.3 toolbox,
+# Phase 3 ingest, Phase 3/5/8 dashboard_api, Phase 8 web) rather than leaving
+# a `docker compose up` that fails on a missing Dockerfile. See docs/DEV.md.
+
+name: ouroboros
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ouroboros
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: localdev # pragma: allowlist secret — local-only placeholder, not a real credential
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d ouroboros"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # toolbox:
+  #   image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
+  #   command: ["--tools-file=/config/tools.yaml", "--address=0.0.0.0", "--port=5000"]
+  #   volumes:
+  #     - ./services/toolbox/tools.yaml:/config/tools.yaml:ro
+  #   environment:
+  #     OUROBOROS_ENV: local
+  #     DB_HOST: postgres
+  #     DB_NAME: ouroboros
+  #     DB_USER: app
+  #     DB_PASSWORD: localdev  # pragma: allowlist secret
+  #   ports:
+  #     - "5000:5000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+  # ingest:
+  #   build: { context: ., dockerfile: services/ingest/Dockerfile }
+  #   env_file: .env
+  #   environment: { DB_HOST: postgres, TOOLBOX_MCP_URL: http://toolbox:5000 }
+  #   ports: ["8081:8080"]
+  #   depends_on: [postgres, toolbox]
+
+  # dashboard_api:
+  #   build: { context: ., dockerfile: services/dashboard_api/Dockerfile }
+  #   env_file: .env
+  #   environment: { DB_HOST: postgres, TOOLBOX_MCP_URL: http://toolbox:5000 }
+  #   ports: ["8080:8080"]
+  #   depends_on: [postgres, toolbox]
+
+  # web:
+  #   build: { context: web }
+  #   command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+  #   volumes: ["./web:/app", "/app/node_modules"]
+  #   ports: ["5173:5173"]
+  #   depends_on: [dashboard_api]
+
+volumes:
+  pgdata:

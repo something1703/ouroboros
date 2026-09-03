@@ -21,8 +21,9 @@ test:
 test-live:
 	uv run pytest -m live
 
-run-local: ## Phase 1.4
-	@echo "TODO (Phase 1.4): docker compose up -d postgres toolbox ingest dashboard_api web"
+run-local: ## Phase 1.4 — today this is just postgres; see docs/DEV.md for what's still commented out
+	docker compose up -d postgres
+	@echo "postgres: postgresql://app:localdev@localhost:5432/ouroboros" # pragma: allowlist secret
 
 deploy: ## Phase 1.5 — usage: make deploy ENV=dev
 	@echo "TODO (Phase 1.5): terraform -chdir=infra apply -var-file=environments/$(ENV).tfvars, then cloud run + agent engine deploy"

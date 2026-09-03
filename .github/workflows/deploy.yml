@@ -29,6 +29,10 @@ jobs:
         with:
           terraform_version: "1.15.6"
 
+      - name: terraform init
+        working-directory: infra
+        run: terraform init
+
       - name: terraform apply (dev)
         working-directory: infra
         run: terraform apply -var-file=environments/dev.tfvars -auto-approve

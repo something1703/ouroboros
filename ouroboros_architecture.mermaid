@@ -1,0 +1,121 @@
+flowchart LR
+    %% ───────────────────────── INGEST ─────────────────────────
+    subgraph INGEST["1 · INGEST (Google Cloud)"]
+        GCS[("Cloud Storage<br/>scripts & rough cuts")]
+        EA["Eventarc<br/>object.finalize"]
+        ING["Cloud Run · Ingest Service"]
+        GEM_DOC["Gemini<br/>document understanding<br/>(multilingual scripts)"]
+        GEM_VID["Gemini<br/>video understanding<br/>(timestamped transcript,<br/>on-screen text)"]
+        ARMOR["Model Armor<br/>prompt-injection screen"]
+        GCS --> EA --> ING
+        ING --> GEM_DOC
+        ING --> GEM_VID
+        GEM_DOC --> ARMOR
+        GEM_VID --> ARMOR
+    end
+
+    %% ───────────────────────── LEDGER ─────────────────────────
+    subgraph DATA["2 · CLAIM LEDGER (Google Cloud)"]
+        SQL[("Cloud SQL<br/>claim ledger")]
+        TOOLBOX["MCP Toolbox for Databases<br/>(managed MCP server)"]
+        FS[("Firestore<br/>live claim state + event feed")]
+        BQ[("BigQuery<br/>ledger analytics +<br/>Parallel remote functions")]
+        SM["Secret Manager<br/>PARALLEL_API_KEY"]
+        SQL --- TOOLBOX
+        SQL --> BQ
+    end
+    ARMOR -->|"Claim Ledger<br/>legal + factual claims"| SQL
+
+    %% ───────────────────────── AGENTS ─────────────────────────
+    subgraph AGENTS["3 · ORCHESTRATION (Agent Engine · ADK)"]
+        COORD["Coordinator agent"]
+        subgraph FAN["ParallelAgent fan-out"]
+            A_MUSIC["Music agent"]
+            A_BRAND["Brand / Trademark agent"]
+            A_PERSON["Persons / Likeness agent"]
+            A_LOC["Locations / Art agent"]
+            A_FACT["Factual Claims agent<br/>(TRUE CUT)"]
+        end
+        RISK["RiskAssessor agent<br/>risk score + Reality Drift"]
+        REPORT["Reporter agent<br/>E&O evidence pack ·<br/>clearance log · fact-check"]
+        QA["Conversational Q&A<br/>Gemini + ToolParallelAiSearch<br/>+ Vertex AI Search (private corpus)"]
+        EVAL["Vertex AI Evaluation<br/>golden-set evals"]
+        A2A["A2A protocol<br/>CLEAR ⇄ TRUE CUT (stretch)"]
+        COORD --> FAN
+        FAN --> RISK --> REPORT
+        A_FACT -. A2A .- A_PERSON
+    end
+    SQL --> COORD
+    TOOLBOX -->|"MCP tools"| COORD
+    SM -.-> COORD
+    REPORT --> FS
+    RISK --> BQ
+
+    %% ───────────────────────── PARALLEL ─────────────────────────
+    subgraph PARALLEL["4 · PARALLEL WEB SYSTEMS (research layer)"]
+        P_SEARCH["Search API<br/>fast · geo location ·<br/>exclude_domains · after_date"]
+        P_TASK["Task API<br/>core-fast → pro escalation<br/>structured schema + Basis<br/>(citations · reasoning · confidence)"]
+        P_RESP["Responses API<br/>medium effort · sync ·<br/>structured cited answers"]
+        P_ENTITY["Entity Search<br/>publishers · labels · estates"]
+        P_EXTRACT["Extract API<br/>licensing & archive pages"]
+        P_MON["Monitor API<br/>snapshot on Task outputs ·<br/>event-stream on stories"]
+        P_MEM["Parallel Memory<br/>memory_scope_key per studio"]
+        P_SLACK["Slack integration"]
+        P_MON --> P_SLACK
+    end
+    A_MUSIC & A_BRAND & A_PERSON & A_LOC -->|"triage"| P_SEARCH
+    P_SEARCH -->|"escalate"| P_TASK
+    A_FACT --> P_RESP
+    P_RESP -->|"contested claims"| P_TASK
+    A_PERSON --> P_ENTITY
+    A_FACT --> P_EXTRACT
+    P_TASK -->|"remote MCP tool call<br/>(two-way integration)"| TOOLBOX
+    P_TASK <--> P_MEM
+    P_TASK -->|"high-risk findings"| P_MON
+
+    %% ───────────────────────── OUROBOROS LOOP ─────────────────────────
+    subgraph LOOP["5 · OUROBOROS LOOP (re-verification)"]
+        WH["Cloud Run · Webhook Receiver"]
+        PS["Pub/Sub<br/>verification-events"]
+        REVERIFY["Re-verification Task run<br/>previous_interaction_id = event_id"]
+        SCHED["Cloud Scheduler<br/>“the coil tightens”<br/>1w → 1d → 1h before release"]
+        WH --> PS --> REVERIFY
+        SCHED -->|"update frequency"| P_MON
+    end
+    P_MON -->|"monitor.event.detected"| WH
+    REVERIFY --> P_TASK
+    REVERIFY -->|"updated claim"| SQL
+
+    %% ───────────────────────── REMEDIATION ─────────────────────────
+    subgraph REMEDY["6 · REMEDIATION (stretch)"]
+        LYRIA["Lyria<br/>royalty-free temp cue"]
+        IMG["Gemini image gen<br/>fictional brand / prop mockup"]
+    end
+    RISK -->|"unclearable"| LYRIA
+    RISK -->|"unclearable"| IMG
+
+    %% ───────────────────────── PRESENTATION ─────────────────────────
+    subgraph UI["7 · PRESENTATION & GOVERNANCE"]
+        IAP["Identity-Aware Proxy<br/>IAM roles: Legal · Editorial · Producer"]
+        DASH["Cloud Run · Dashboard<br/>script risk heatmap ·<br/>video claim timeline ·<br/>live monitor feed · Reality Drift"]
+        EXPORT["Exports<br/>E&O evidence pack (PDF) ·<br/>clearance log → Google Sheets"]
+        LIVE["Gemini Live API<br/>on-set voice Q&A (stretch)"]
+        OBS["Cloud Logging / Trace<br/>per-claim observability"]
+        IAP --> DASH --> EXPORT
+        DASH --> LIVE
+    end
+    FS --> DASH
+    QA --> DASH
+    LIVE --> QA
+    AGENTS -.-> OBS
+    AGENTS -.-> EVAL
+
+    %% ───────────────────────── STYLES ─────────────────────────
+    classDef gcp fill:#1a2a44,stroke:#4a90e2,color:#e8f0fe
+    classDef parallel fill:#3a2612,stroke:#fb631b,color:#ffe8d6
+    classDef loop fill:#2a1a3a,stroke:#b57bee,color:#f3e8ff
+    classDef stretch fill:#1f2a1f,stroke:#7ac47a,color:#e6f5e6,stroke-dasharray: 5 5
+    class GCS,EA,ING,GEM_DOC,GEM_VID,ARMOR,SQL,TOOLBOX,FS,BQ,SM,COORD,A_MUSIC,A_BRAND,A_PERSON,A_LOC,A_FACT,RISK,REPORT,QA,EVAL,IAP,DASH,EXPORT,OBS gcp
+    class P_SEARCH,P_TASK,P_RESP,P_ENTITY,P_EXTRACT,P_MON,P_MEM,P_SLACK parallel
+    class WH,PS,REVERIFY,SCHED loop
+    class LYRIA,IMG,LIVE,A2A stretch

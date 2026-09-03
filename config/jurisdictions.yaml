@@ -1,0 +1,86 @@
+# Jurisdiction config: country -> Parallel geo code, performing-rights orgs, and
+# objective phrasing hints used to steer Search/Task objectives per DATA_MODEL.md §7.
+#
+# `parallel_location`: only set when the code is one Parallel's Search API
+# actually geo-targets (their docs confirm "only a subset of countries are
+# currently supported; unsupported values are ignored with a warning" but do
+# not publish the full enumerated list as of 2026-08-31). Entries below are
+# ISO 3166-1 alpha-2 codes for the countries we expect to demo against; if a
+# `parallel_location` value turns out to be unsupported, Parallel silently
+# ignores it (no error) and the objective_hint text still carries the intent.
+# Verify against real Search responses in Phase 4 and prune/expand as needed.
+#
+# `music_pro`: performing-rights / collection societies relevant to sync
+# licensing in that territory. Used as a search hint, not a legal citation.
+
+in:
+  parallel_location: in
+  music_pro: [IPRS, PPL India]
+  objective_hint: "Prefer official Indian rights bodies (IPRS, PPL), the Indian trademark registry (ipindia.gov.in), and reputable Indian trade press."
+
+us:
+  parallel_location: us
+  music_pro: [ASCAP, BMI, SESAC]
+  objective_hint: "Prefer USPTO, ASCAP/BMI/SESAC repertory databases, and official publisher/label sites."
+
+gb:
+  parallel_location: gb
+  music_pro: [PRS for Music, PPL]
+  objective_hint: "Prefer PRS for Music, PPL, the UK IPO trademark register, and official publisher sites. Use 'gb', never 'uk', for geo-targeting."
+
+de:
+  parallel_location: de
+  music_pro: [GEMA]
+  objective_hint: "Prefer GEMA, the DPMA trademark register, and official publisher sites."
+
+jp:
+  parallel_location: jp
+  music_pro: [JASRAC]
+  objective_hint: "Prefer JASRAC, the JPO trademark register, and official label sites."
+
+fr:
+  parallel_location: fr
+  music_pro: [SACEM]
+  objective_hint: "Prefer SACEM, the INPI trademark register, and official publisher sites."
+
+br:
+  parallel_location: br
+  music_pro: [ECAD]
+  objective_hint: "Prefer ECAD, the INPI (Brazil) trademark register, and official publisher/label sites."
+
+mx:
+  parallel_location: mx
+  music_pro: [SACM]
+  objective_hint: "Prefer SACM, the IMPI trademark register, and official publisher sites."
+
+kr:
+  parallel_location: kr
+  music_pro: [KOMCA]
+  objective_hint: "Prefer KOMCA, the KIPO trademark register, and official label sites."
+
+au:
+  parallel_location: au
+  music_pro: [APRA AMCOS]
+  objective_hint: "Prefer APRA AMCOS, IP Australia's trademark register, and official publisher sites."
+
+ca:
+  parallel_location: ca
+  music_pro: [SOCAN]
+  objective_hint: "Prefer SOCAN, the CIPO trademark register, and official publisher sites."
+
+za:
+  parallel_location: za
+  music_pro: [SAMRO]
+  objective_hint: "Prefer SAMRO, the CIPC trademark register, and official publisher sites."
+
+sa:
+  parallel_location: sa
+  music_pro: [] # No single established local PRO comparable to Western societies as of 2026-08-31.
+  objective_hint: "Focus on Saudi Arabia: the Saudi Authority for Intellectual Property (SAIP) for trademarks, and direct rights-holder/international-society contact for music sync (no established local PRO)."
+
+# Example of a country NOT in Parallel's geo-targeted subset: omit
+# `parallel_location` entirely and carry the country name in the objective
+# text instead. See DATA_MODEL.md §7 and packages/parallel_client/search.py.
+ng:
+  music_pro: [COSON, MCSN]
+  objective_hint: "Focus on Nigeria: COSON/MCSN for music, the Nigerian trademark registry, and Nigerian trade press. Do not set a Parallel location code for this jurisdiction."

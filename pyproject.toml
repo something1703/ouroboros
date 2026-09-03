@@ -1,0 +1,99 @@
+[project]
+name = "ouroboros"
+version = "0.1.0"
+description = "Ouroboros — research that feeds itself. A self-verifying production-intelligence agent for film & TV."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "google-adk",
+    "google-cloud-aiplatform[agent_engines,adk]>=1.101.0",
+    "google-genai",
+    "parallel-web>=1.0.1",
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2",
+    "alembic",
+    "psycopg[binary]",
+    "pydantic>=2",
+    "google-cloud-secret-manager",
+    "google-cloud-firestore",
+    "google-cloud-pubsub",
+    "google-cloud-storage",
+    "google-cloud-bigquery",
+    "toolbox-core",
+    "httpx",
+    "structlog",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-gcp-trace",
+    "opentelemetry-instrumentation-fastapi",
+    "PyYAML",
+    "python-ulid",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "vcrpy",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "hypothesis",
+    "types-PyYAML",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["config", "packages", "services", "agents"]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["web", ".venv", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "packages", "services", "agents"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "packages.*"
+strict = true
+disallow_any_explicit = true
+
+[[tool.mypy.overrides]]
+module = ["vcr.*", "toolbox_core.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "live: requires real network/API access (skipped in CI, run via make test-live)",
+]
+
+[tool.coverage.run]
+source = ["config", "packages", "services", "agents"]

@@ -1,0 +1,28 @@
+# DECISIONS.md — Architecture decision log
+
+Append-only. One entry per decision that constrains future work. The coding agent adds entries whenever it deviates from the plan or chooses between alternatives the plan left open.
+
+| # | Date | Decision | Alternatives considered | Rationale |
+|---|---|---|---|---|
+| 001 | 2026-08-31 | Product is a **claims-verification loop** (CLEAR + TRUE CUT), not a storyboard/script-chat tool | Storyboards, TTS table reads, festival finder | Parallel's centre of gravity is research/verification; judges from Parallel score depth on their APIs; E&O insurance gives a hard business hook |
+| 002 | 2026-08-31 | Name **Ouroboros** (classical spelling) | Ouroborus | The three literal loops (snapshot monitors on Task outputs, Task calling our MCP, memory across productions) make the name structural |
+| 003 | 2026-08-31 | Python 3.12 monorepo with `uv`; TypeScript only in `web/` | Full TS with Vercel AI SDK Parallel tools | ADK Python is the primary path in the hackathon resources; Agent Engine deploy is Python-first |
+| 004 | 2026-08-31 | Parallel via **BYOK** by default; Marketplace optional | Marketplace only | Avoids subscription lead time; both paths share one code path in `grounding.py` |
+| 005 | 2026-08-31 | Search `mode=fast` default; `basic/advanced` only where configured | `advanced` everywhere | 5× cheaper, ~4× faster; quality difference immaterial for triage; Task does the deep work |
+| 006 | 2026-08-31 | **No `include_domains` by default**; steer via objective + `exclude_domains` | Per-country allow-lists of rights bodies | Parallel docs warn hard allow-lists degrade quality; objective hints per jurisdiction retain recall |
+| 007 | 2026-08-31 | Task processors: `core-fast` default, `pro` escalation only; `ultra*` forbidden | `pro` default | Cost/latency; escalation is data-driven (low confidence × high priority) |
+| 008 | 2026-08-31 | Ledger = Cloud SQL via **MCP Toolbox for Databases**; Firestore is a derived projection | Firestore as source of truth | Relational integrity for evidence/history; Toolbox gives one managed MCP server for both ADK and Parallel Task |
+| 009 | 2026-08-31 | Expose **read-only** ledger tools to Parallel Task runs via a token-protected proxy | Expose full Toolbox | Security; Parallel needs context, never write access |
+| 010 | 2026-08-31 | Re-verification uses a direct Gemini call for risk (not a full Agent Engine run) | Full agent run per event | Latency and cost per event; rubric identical (shared prompt + `prescore`) |
+| 011 | 2026-08-31 | Monitor cadence policy 1w/1d/1h by days-to-release, applied by Cloud Scheduler | Fixed daily | Demonstrable "coil tightens" behaviour; cost stays flat until the final week |
+| 012 | 2026-08-31 | Geo-targeting only for Parallel's 37 supported countries; others via objective wording | Claim "worldwide" | Honesty in the pitch; documented in README |
+| 013 | 2026-08-31 | Remediation (Lyria, image mockup) and Live API are **stretch**, gated on Phases 1–9 green | In scope | Protects the loop, which is the differentiator |
+| 014 | 2026-08-31 | Apache-2.0 license | MIT | Patent grant; common for Google-ecosystem projects |
+| 015 | 2026-09-03 | GCP project is **ouroboros-507503** (new, dedicated), region `us-central1`, billing account `014157-78E5D3-5EBE17` | Reuse existing `aegis-live-488416` project | A1/A3 confirmed by human; existing project already ran unrelated live services (recoup-*, trueforge), so a dedicated project keeps cost/IAM/blast-radius isolated per the original A1 requirement |
+| 016 | 2026-09-03 | `docs/BLOCKERS.md` and `docs/DECISIONS.md` live under `docs/` from Phase 1 onward, not at repo root | Leave at root until Phase 10.5's planning-package move | Every other doc already references them as `docs/BLOCKERS.md`/`docs/DECISIONS.md` (e.g. `AGENTS.md §6`, `§8`); Phase 10.5 only moves the reference contracts (`ARCHITECTURE.md`, `DATA_MODEL.md`, etc.), not these two operational logs |
+| 017 | 2026-09-03 | `config/parallel.py: SUPPORTED_LOCATIONS` is a **curated, unverified** ~40-code list, not Parallel's official enumeration | Hardcode exactly "the 37 codes" as if confirmed | Fetched `docs.parallel.ai` search reference directly (2026-09-03): current docs state "only a subset of countries are currently supported; unsupported or invalid values are ignored with a warning" but do not publish the full list. Fabricating a precise list we can't verify would violate `AGENTS.md`'s "never fake a result" rule. Low risk either way: Parallel ignores unsupported codes rather than erroring. **Action for Phase 4:** watch live Search responses for location warnings and correct this list from real evidence. |
+
+## Open questions for the human
+- E1 (spelling) and E5 (license) confirmed 2026-09-02: **Ouroboros**, **Apache-2.0**. See `00_REQUIREMENTS_FROM_USER.md` §E.
+- Still open: E2, E3, E4, E6 in `00_REQUIREMENTS_FROM_USER.md` §E. None are blocking for Phase 1.
+- A1–A4, A6 resolved 2026-09-03 (project `ouroboros-507503`, IAM owner, region `us-central1`, Parallel key in Secret Manager, BYOK). A5 resolved: repo is `https://github.com/something1703/ouroboros` — **still needs to be confirmed Public** before submission. See `docs/BLOCKERS.md`.

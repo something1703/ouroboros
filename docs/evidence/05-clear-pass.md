@@ -11,7 +11,7 @@ throughout.
 |---|---|---|---|
 | Claims with Evidence | 60 / 62 (96.8%) | ≥ 95% | ✅ |
 | Total Parallel cost | $1.54 | < $8 | ✅ |
-| Monitors created | 96 rows (28 distinct claims; see *Monitor duplication* below) | ≥ 3 | ✅ |
+| Monitors created | 51 genuinely distinct, active (after cleanup — see *Monitor duplication* below) | ≥ 3 | ✅ |
 | Wall time for a single clean pass | not achieved — see *Wall time* below | < 25 min | ⚠️ see note |
 
 Risk distribution across the 60 assessed claims: `blocking` 22, `medium` 16, `low` 18,
@@ -80,10 +80,16 @@ real, separate Monitor at Parallel for it — confirmed via
 Fixed with a Postgres advisory lock (`pg_try_advisory_lock(hashtext(project_id))`) held
 for a run's entire `stream_query` duration — a second concurrent attempt is now
 rejected immediately rather than running at all. Verified locally against a real
-Postgres connection before deploying. The ~20 real duplicate Monitors already created
-at Parallel before this fix landed are a known cleanup item (cancelling the extras),
-not completed here given time constraints — they cost nothing further to leave running
-for a demo project, but are real Parallel-side clutter worth tidying up post-hackathon.
+Postgres connection before deploying.
+
+**Cleanup, done**: the 45 duplicate Monitors that had accumulated at Parallel before
+this fix landed were cancelled for real — `packages/parallel_client/monitor.py::cancel`
+already existed, so a throwaway script kept the earliest-created Monitor per
+`(claim_id, type)` group and cancelled the rest (45/45 succeeded, real
+`POST .../monitors/{id}/cancel` calls, `200 OK` each), with the corresponding
+`monitors` table rows updated to `status='cancelled'`. Final state: 0 remaining
+duplicate groups, 51 genuinely distinct active Monitors — one snapshot and/or one
+event_stream per claim that earned one, exactly as designed.
 
 ## Cloud Trace (PHASE_05.md §5.5's "spans across API → Engine → Parallel")
 
@@ -137,7 +143,6 @@ one place to see the whole arc:
 
 ## What's still open
 
-- ~20 duplicate Monitors at Parallel from before #076's fix — not cancelled.
 - `reporter.py::_finalize_report`'s returned `report.claims_by_risk` JSON field
   undercounts on a retrigger that mostly finds already-assessed claims (reads
   RiskAssessor's per-turn state, narrowed by #074's dedup) — the persistent,

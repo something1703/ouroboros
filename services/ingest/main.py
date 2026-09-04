@@ -131,9 +131,17 @@ def _process_object(*, bucket: str, name: str, generation: str) -> None:
         projector = Projector()
         for claim in deduped:
             projector.claim_view(
-                claim,
-                risk=None,
-                evidence=None,
+                project_id=claim.project_id,
+                claim_id=claim.claim_id,
+                category=claim.category.value,
+                entity_text=claim.entity_text,
+                claim_text=claim.claim_text,
+                priority=claim.priority,
+                status=claim.status.value,
+                updated_at=claim.updated_at,
+                risk_level=None,
+                risk_score=None,
+                evidence_summary=None,
                 history_count=0,
                 monitor_status=None,
             )

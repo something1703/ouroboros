@@ -105,7 +105,7 @@ def verify_claim(
         f"  task: run_id={result.run_id}, processor={processor}, confidence={result.overall_confidence.value}"
     )
 
-    if escalate_flag and should_escalate(result.overall_confidence, claim):
+    if escalate_flag and should_escalate(result.overall_confidence, claim.priority):
         print("  escalating to processor=pro (low confidence, priority <= 2)...")
         with (
             session_scope() as cost_session,

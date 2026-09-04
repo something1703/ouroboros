@@ -16,29 +16,24 @@ from typing import Literal
 
 from google.cloud import firestore
 
-from packages.claims.models import Claim, Evidence, Risk
-
 EventKind = Literal["monitor_event", "reverified", "risk_changed"]
 
 
 def get_client() -> firestore.Client:
     database = os.environ.get("FIRESTORE_DATABASE", "(default)")
-    return firestore.Client(database=database)
-
-
-def _evidence_summary(evidence: Evidence) -> dict[str, object]:
-    """A short summary for the claim card: verdict/holder-ish top field, confidence,
-    and up to 3 citation URLs — not the full evidence.output blob."""
-    top_citations: list[str] = []
-    for field_basis in evidence.basis[:3]:
-        for citation in field_basis.citations[:1]:
-            top_citations.append(citation.url)
-    return {
-        "method": evidence.method,
-        "confidence": evidence.overall_confidence.value,
-        "cycle": evidence.cycle,
-        "top_citations": top_citations,
-    }
+    # `project=` passed explicitly rather than left to firestore.Client's own implicit
+    # auto-detection (docs/DECISIONS.md #070) -- found live, reproducible on 2/2 CLEAR
+    # pass attempts: the agent's very first Firestore write (RiskAssessor's
+    # write_claim_view, on a module-level Projector() built at import time during a
+    # fresh Agent Engine cold start) failed with `404 The database (default) does not
+    # exist`, for a project/database that a plain script confirmed real seconds later.
+    # GOOGLE_CLOUD_PROJECT is a *reserved* env var name on Agent Engine deployments
+    # (Vertex AI rejects setting it explicitly) -- reserved because the platform
+    # injects it itself, so reading it here is reliable even though `agents/deploy/
+    # deploy.py` never sets it. Passing it straight to the constructor sidesteps
+    # whatever the SDK's own default-project detection was racing against.
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    return firestore.Client(project=project, database=database)
 
 
 class Projector:
@@ -47,34 +42,62 @@ class Projector:
 
     def claim_view(
         self,
-        claim: Claim,
         *,
-        risk: Risk | None,
-        evidence: Evidence | None,
+        project_id: str,
+        claim_id: str,
+        category: str,
+        entity_text: str,
+        claim_text: str,
+        priority: int,
+        status: str,
+        updated_at: datetime,
+        risk_level: str | None,
+        risk_score: float | None,
+        evidence_summary: dict[str, object] | None,
         history_count: int,
         monitor_status: str | None,
     ) -> None:
+        """Takes already-known primitives, not `Claim`/`Risk`/`Evidence` domain objects
+        (docs/DECISIONS.md #067) — the only two callers either already have these values
+        in hand from their own Cloud SQL transaction (`services/ingest`) or can only
+        reach this data via Toolbox, not a live DB session (`agents/ouroboros/tools/
+        firestore_tools.py`, which builds `evidence_summary` itself from Toolbox JSON),
+        so a shared domain-object signature bought nothing and forced the second caller
+        into a DB connection that hangs forever from the Agent Engine's runtime."""
         doc_ref = (
             self._client.collection("projects")
-            .document(claim.project_id)
+            .document(project_id)
             .collection("claims")
-            .document(claim.claim_id)
+            .document(claim_id)
         )
         data: dict[str, object] = {
-            "claim_id": claim.claim_id,
-            "category": claim.category.value,
-            "entity_text": claim.entity_text,
-            "claim_text": claim.claim_text,
-            "priority": claim.priority,
-            "status": claim.status.value,
-            "risk_level": risk.level.value if risk else None,
-            "risk_score": risk.score if risk else None,
-            "evidence_summary": _evidence_summary(evidence) if evidence else None,
+            "claim_id": claim_id,
+            "category": category,
+            "entity_text": entity_text,
+            "claim_text": claim_text,
+            "priority": priority,
+            "status": status,
+            "risk_level": risk_level,
+            "risk_score": risk_score,
+            "evidence_summary": evidence_summary,
             "monitor_status": monitor_status,
             "history_count": history_count,
-            "updated_at": claim.updated_at,
+            "updated_at": updated_at,
         }
         doc_ref.set(data, merge=True)
+
+    def claim_summary(self, project_id: str, claim_id: str, summary_md: str) -> None:
+        """Merge-writes just the human-readable summary Reporter generates (ADK_AGENTS.md
+        §2.4) onto an existing claim_view document — a separate, small write rather than
+        widening `claim_view`'s own signature, since Reporter runs after (and doesn't
+        otherwise touch) whatever `claim_view` last wrote for this claim."""
+        doc_ref = (
+            self._client.collection("projects")
+            .document(project_id)
+            .collection("claims")
+            .document(claim_id)
+        )
+        doc_ref.set({"summary_md": summary_md}, merge=True)
 
     def project_summary(
         self,

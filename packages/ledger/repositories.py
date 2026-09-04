@@ -391,6 +391,18 @@ class RiskRepo:
         row = session.get(RiskRow, claim_id)
         return _risk_from_row(row) if row else None
 
+    @staticmethod
+    def count_by_level(session: Session, project_id: str) -> dict[str, int]:
+        """Aggregate counts for `Projector.project_summary` — `risk` has no
+        `project_id` of its own, so this joins through `claims`."""
+        stmt = (
+            select(RiskRow.level, func.count())
+            .join(ClaimRow, ClaimRow.claim_id == RiskRow.claim_id)
+            .where(ClaimRow.project_id == project_id)
+            .group_by(RiskRow.level)
+        )
+        return {level: count for level, count in session.execute(stmt).all()}  # noqa: C416
+
 
 class HistoryRepo:
     @staticmethod

@@ -26,6 +26,19 @@ resource "google_sql_database_instance" "ouroboros" {
       ipv4_enabled    = var.enable_public_ip # see variables.tf — off by default
       private_network = var.vpc_network_id
     }
+
+    # db-f1-micro's auto-calculated default (25, from its 0.6GB RAM) isn't enough once
+    # every service sharing this instance (agents/ouroboros's own direct budget/cost
+    # tracking, Toolbox's separate pool for every ledger read/write, dashboard-api,
+    # ingest) is counted together — found live running a real CLEAR pass at demo scale
+    # (docs/DECISIONS.md #055, #060, #061): even after tuning every consumer's own pool
+    # size down, connection timeouts kept accumulating under real concurrent load.
+    # Applied manually first (`gcloud sql instances patch`, verified live) then codified
+    # here so a future `terraform apply` doesn't drift it back to the tier default.
+    database_flags {
+      name  = "max_connections"
+      value = "100"
+    }
   }
 
   depends_on = [var.private_service_connection]

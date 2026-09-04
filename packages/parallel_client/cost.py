@@ -42,6 +42,19 @@ def gemini_cost(model: str, *, input_tokens: int, output_tokens: int) -> Decimal
     return input_cost + output_cost
 
 
+def check_budget(session: Session, project_id: str) -> None:
+    """Pre-flight check (`cost.check` tool, ADK_AGENTS.md §0): raises `BudgetExceeded`
+    if the project is *already* over its cap, without recording anything — a specialist
+    calls this once per claim before doing any real work, so a batch stops cleanly
+    (PARALLEL_INTEGRATION.md §6: "mark remaining claims pending with note budget")
+    rather than exceeding the cap mid-batch on an already-blown budget."""
+    spent = ProjectRepo.spend(session, project_id)
+    project = ProjectRepo.get(session, project_id)
+    cap = project.budget_cap_usd if project else Decimal(str(PROJECT_BUDGET_USD_DEFAULT))
+    if spent > cap:
+        raise BudgetExceeded(project_id, float(spent), float(cap))
+
+
 class CostMeter:
     """`with CostMeter(session, project_id, api="search", sku="search.fast", claim_id=claim_id):`
 

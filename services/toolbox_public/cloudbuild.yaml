@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - services/toolbox_public/Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/toolbox-public:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/toolbox-public:latest

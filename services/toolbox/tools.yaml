@@ -40,9 +40,10 @@ statement: |
     c.claim_id, c.project_id, c.studio_id, c.kind, c.category, c.entity_text,
     c.normalized_text, c.claim_text, c.language, c.source, c.jurisdictions,
     c.priority, c.status, c.created_at, c.updated_at,
-    e.evidence_id, e.cycle, e.method, e.output AS evidence_output,
-    e.overall_confidence, e.created_at AS evidence_created_at,
-    r.level AS risk_level, r.score AS risk_score, r.rationale AS risk_rationale
+    e.evidence_id, e.cycle, e.method, e.parallel_run_id, e.output AS evidence_output,
+    e.basis AS evidence_basis, e.overall_confidence, e.created_at AS evidence_created_at,
+    r.level AS risk_level, r.score AS risk_score, r.rationale AS risk_rationale,
+    EXISTS (SELECT 1 FROM monitors m WHERE m.claim_id = c.claim_id) AS has_monitor
   FROM claims c
   LEFT JOIN LATERAL (
     SELECT * FROM evidence WHERE evidence.claim_id = c.claim_id ORDER BY cycle DESC LIMIT 1
@@ -118,6 +119,31 @@ statement: |
   WHERE project_id = $1;
 
 ---
+# Mirrors packages/parallel_client/cost.py's check_budget()/CostMeter's own spend+cap
+# query exactly — added so agents/ouroboros/clear/specialist.py's direct-DB budget
+# check can go through Toolbox instead. Found live: the deployed Agent Engine's runtime
+# has no VPC path to Cloud SQL's private IP (unlike Toolbox, a properly VPC-connected
+# Cloud Run service), so a *direct* SQLAlchemy connection from inside the agent process
+# just hangs until timeout — every real call to packages/ledger/db.py's engine from
+# Agent Engine fails this way, regardless of how large max_connections is (see
+# docs/DECISIONS.md #062).
+kind: tool
+name: check_budget
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Get a project's total spend so far (sum of every cost_events row) and its budget
+  cap, so a caller can decide whether it's already over budget.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to check.
+statement: |
+  SELECT
+    COALESCE((SELECT SUM(cost_usd) FROM cost_events WHERE project_id = $1), 0) AS spend_usd,
+    COALESCE((SELECT budget_cap_usd FROM projects WHERE project_id = $1), 10.00) AS cap_usd;
+
+---
 # --- Writes (ledger_write only — never exposed to Parallel) ---
 
 kind: tool
@@ -153,12 +179,18 @@ parameters:
   - name: cost_usd
     type: float
     description: Cost of this verification cycle in USD.
+  - name: parallel_run_id
+    type: string
+    description: "The Parallel Task run_id (trun_...) this evidence came from, if any. Pass an empty string for none (e.g. method=search has no Task run)."
+  - name: processor
+    type: string
+    description: "The Parallel Task processor used (e.g. core-fast, pro), if any. Pass an empty string for none."
 statement: |
   WITH next_cycle AS (
     SELECT COALESCE(MAX(cycle), 0) + 1 AS n FROM evidence WHERE evidence.claim_id = $2
   )
-  INSERT INTO evidence (evidence_id, claim_id, cycle, method, output, basis, overall_confidence, cost_usd, created_at)
-  SELECT $1, $2, next_cycle.n, $4, $5::jsonb, $6::jsonb, $7, $8, now()
+  INSERT INTO evidence (evidence_id, claim_id, cycle, method, output, basis, overall_confidence, cost_usd, parallel_run_id, processor, created_at)
+  SELECT $1, $2, next_cycle.n, $4, $5::jsonb, $6::jsonb, $7, $8, NULLIF($9, ''), NULLIF($10, ''), now()
   FROM next_cycle
   WHERE next_cycle.n = $3
   RETURNING evidence_id, cycle;
@@ -201,6 +233,179 @@ statement: |
   RETURNING event_id;
 
 ---
+kind: tool
+name: record_risk
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Upsert the current risk assessment for a claim (one row per claim, latest wins) and
+  append the same assessment to risk_history (append-only) in one transaction.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim this assessment is for.
+  - name: evidence_id
+    type: string
+    description: The Evidence this assessment is based on.
+  - name: level
+    type: string
+    description: "One of: none, low, medium, high, blocking."
+  - name: score
+    type: float
+    description: Risk score in [0, 1].
+  - name: rationale
+    type: string
+    description: Human-readable rationale for the level and score.
+  - name: cost_band
+    type: string
+    description: "One of: none, <1k, 1k-10k, 10k-100k, >100k, unknown. Pass an empty string for null (not assessed)."
+  - name: remediation_suggested
+    type: boolean
+    description: True if RiskAssessor recommends a remediation (e.g. replace_brand, reshoot).
+  - name: remediation_kind
+    type: string
+    description: "One of: replace_brand, replace_music, reshoot, recut, obtain_release, none."
+  - name: territory_flags_json
+    type: string
+    description: JSON object mapping jurisdiction code to risk level, as a JSON string. Pass "{}" for none.
+statement: |
+  WITH upserted AS (
+    INSERT INTO risk (claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at)
+    VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9::jsonb, now())
+    ON CONFLICT (claim_id) DO UPDATE SET
+      evidence_id = EXCLUDED.evidence_id,
+      level = EXCLUDED.level,
+      score = EXCLUDED.score,
+      rationale = EXCLUDED.rationale,
+      cost_band = EXCLUDED.cost_band,
+      remediation_suggested = EXCLUDED.remediation_suggested,
+      remediation_kind = EXCLUDED.remediation_kind,
+      territory_flags = EXCLUDED.territory_flags,
+      assessed_at = EXCLUDED.assessed_at
+    RETURNING claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at
+  )
+  INSERT INTO risk_history (claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at)
+  SELECT claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at FROM upserted
+  RETURNING id;
+
+---
+kind: tool
+name: record_monitor
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Upsert a Parallel Monitor record (one row per monitor_id) — called after a real,
+  successful monitor_create_snapshot/monitor_create_stream call, never for a failed one.
+parameters:
+  - name: monitor_id
+    type: string
+    description: The Parallel monitor id this record is for.
+  - name: claim_id
+    type: string
+    description: The claim this Monitor watches.
+  - name: monitor_type
+    type: string
+    description: "One of: snapshot, event_stream."
+  - name: task_run_id
+    type: string
+    description: "The Task run_id a snapshot Monitor watches. Pass an empty string for none (event_stream Monitors have no task_run_id)."
+  - name: query
+    type: string
+    description: "The live-web query an event_stream Monitor watches. Pass an empty string for none (snapshot Monitors have no query)."
+  - name: frequency
+    type: string
+    description: "One of: 1h, 1d, 1w."
+  - name: status
+    type: string
+    description: "One of: active, cancelled."
+statement: |
+  INSERT INTO monitors (monitor_id, claim_id, type, task_run_id, query, frequency, status, created_at)
+  VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, now())
+  ON CONFLICT (monitor_id) DO UPDATE SET
+    frequency = EXCLUDED.frequency,
+    status = EXCLUDED.status
+  RETURNING monitor_id;
+
+---
+# Mirrors packages/parallel_client/cost.py's CostRepo.record() — see check_budget above
+# for why this exists (Toolbox-routed, so it works from Agent Engine's runtime).
+kind: tool
+name: record_cost
+type: postgres-sql
+source: ouroboros_pg
+description: Record one cost_events row (an estimate, or a correction if sku ends in ".correction").
+parameters:
+  - name: project_id
+    type: string
+    description: The project this cost is billed against.
+  - name: claim_id
+    type: string
+    description: The claim this cost is for. Pass an empty string for none.
+  - name: api
+    type: string
+    description: "One of: search, task, responses, entity_search, extract, monitor_create, gemini."
+  - name: sku
+    type: string
+    description: "The priced SKU (e.g. 'search.fast', 'task.core-fast', 'task.core-fast.correction')."
+  - name: units
+    type: integer
+    description: Number of priced units this event covers.
+  - name: cost_usd
+    type: float
+    description: Cost in USD for this event (can be negative for a downward correction).
+statement: |
+  INSERT INTO cost_events (project_id, claim_id, api, sku, units, cost_usd, at)
+  VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, now());
+
+---
+# Backs agents/ouroboros/tools/firestore_tools.py::write_claim_view's `history_count` —
+# Toolbox-routed for the same reason as check_budget/record_cost above (docs/DECISIONS.md
+# #067): RiskAssessor's write_claim_view previously read this via a direct DB session,
+# which hangs forever from the Agent Engine's runtime.
+kind: tool
+name: count_history
+type: postgres-sql
+source: ouroboros_pg
+description: Count verification_history rows for one claim.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to count history rows for.
+statement: |
+  SELECT count(*) AS count FROM verification_history WHERE claim_id = $1;
+
+---
+# Backs firestore_tools.py::write_project_summary's `counts_by_status` (docs/DECISIONS.md #067).
+kind: tool
+name: project_status_counts
+type: postgres-sql
+source: ouroboros_pg
+description: Count claims per status for a project.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to count claims for.
+statement: |
+  SELECT status, count(*) AS count FROM claims WHERE project_id = $1 GROUP BY status;
+
+---
+# Backs firestore_tools.py::write_project_summary's `counts_by_risk` (docs/DECISIONS.md #067).
+kind: tool
+name: project_risk_counts
+type: postgres-sql
+source: ouroboros_pg
+description: Count claims per risk level for a project.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to count claims for.
+statement: |
+  SELECT r.level AS level, count(*) AS count
+  FROM risk r JOIN claims c ON c.claim_id = r.claim_id
+  WHERE c.project_id = $1
+  GROUP BY r.level;
+
+---
 # --- Toolsets ---
 
 kind: toolset
@@ -210,6 +415,10 @@ tools:
   - list_claims
   - get_prior_decisions
   - get_project
+  - check_budget
+  - count_history
+  - project_status_counts
+  - project_risk_counts
 
 ---
 kind: toolset
@@ -217,6 +426,9 @@ name: ledger_write
 tools:
   - record_evidence
   - set_status
+  - record_risk
+  - record_monitor
+  - record_cost
 
 ---
 # Read-only subset exposed to Parallel Task runs (Phase 5.6) — never ledger_write.

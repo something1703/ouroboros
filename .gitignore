@@ -61,3 +61,7 @@ docs/evidence/**/*.mov
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Scratch/throwaway scripts used for live GCP diagnostics during development —
+# never meant to be committed, underscore-prefixed by convention to mark them as such.
+scripts/_*

@@ -14,7 +14,7 @@ from config.parallel import (
     TASK_SPEC_PLUS_INPUT_MAX_CHARS,
 )
 from packages.claims.enums import Confidence
-from packages.claims.models import Claim, FieldBasis
+from packages.claims.models import FieldBasis
 from packages.parallel_client.basis import overall_confidence, parse_basis
 from packages.parallel_client.client import call, env_metadata, get_client
 from packages.parallel_client.specs.loader import SPECS
@@ -125,7 +125,7 @@ def run(
     )
 
 
-def should_escalate(evidence_confidence: Confidence, claim: Claim) -> bool:
+def should_escalate(evidence_confidence: Confidence, priority: int) -> bool:
     """ADK_AGENTS.md §2.2 step 6: escalate to `processor=pro` only when confidence is
     low on a high-priority claim — escalation is data-driven, not automatic."""
-    return evidence_confidence == Confidence.LOW and claim.priority <= 2
+    return evidence_confidence == Confidence.LOW and priority <= 2

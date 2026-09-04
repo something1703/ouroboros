@@ -35,7 +35,19 @@ _session_factory: sessionmaker[Session] | None = None
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
-        _engine = create_engine(_database_url(), pool_pre_ping=True)
+        # pool_size/max_overflow explicit, deliberately *small* -- found live (docs/
+        # DECISIONS.md #055, #060) that the demo Cloud SQL instance is db-f1-micro,
+        # `max_connections=25` total, shared across every service that touches it
+        # (this process, Toolbox's own separate pool, dashboard-api, ingest). A first
+        # attempt raised this to pool_size=20 (30 total) to fix a burst of
+        # ConnectionTimeout errors during a real CLEAR pass -- that only let *this one
+        # consumer* claim more of the same small shared budget, and the timeouts
+        # continued once Toolbox's concurrent connections were counted too. The actual
+        # fix was lowering agents/ouroboros/clear/specialist.py's per-claim concurrency
+        # (peak demand), not raising this pool (this service's share of a fixed, small
+        # supply) -- kept modest here so this process alone can't starve the other
+        # services sharing the same instance. Revisit if the Cloud SQL tier changes.
+        _engine = create_engine(_database_url(), pool_pre_ping=True, pool_size=5, max_overflow=5)
     return _engine
 
 

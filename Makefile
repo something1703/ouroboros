@@ -1,4 +1,4 @@
-.PHONY: setup lint test test-live run-local deploy seed replay-webhook evals
+.PHONY: setup lint test test-live run-local deploy deploy-services deploy-infra deploy-agent-engine seed replay-webhook evals
 
 setup:
 	uv sync
@@ -27,10 +27,55 @@ run-local: ## Phase 1.4 — today this is just postgres; see docs/DEV.md for wha
 	docker compose up -d postgres
 	@echo "postgres: postgresql://app:localdev@localhost:5432/ouroboros" # pragma: allowlist secret
 
-deploy: ## usage: make deploy ENV=dev
+GOOGLE_CLOUD_PROJECT ?= ouroboros-507503
+OUROBOROS_REGION ?= us-central1
+VPC_CONNECTOR ?= ouroboros-dev-conn
+DB_HOST ?= 10.175.0.3
+INTAKE_BUCKET ?= ouroboros-507503-intake-dev
+
+deploy: deploy-services deploy-infra deploy-agent-engine ## usage: make deploy ENV=dev -- mirrors .github/workflows/deploy.yml's three jobs, in the same order (services before infra: an Eventarc trigger's destination and any run.invoker binding on a service both need that service to already exist)
+
+deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github/workflows/deploy.yml for the canonical, CI-run version of these same commands)
+	gcloud builds submit --config=services/toolbox/cloudbuild.yaml .
+	gcloud run deploy toolbox --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/toolbox:latest \
+		--service-account=sa-toolbox@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=TOOLBOX_DB_HOST=$(DB_HOST),TOOLBOX_DB_PORT=5432,TOOLBOX_DB_NAME=ouroboros,TOOLBOX_DB_USER=app \
+		--set-secrets=TOOLBOX_DB_PASSWORD=DB_PASSWORD:latest \
+		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
+		--vpc-egress=private-ranges-only --ingress=all --port=5000
+	gcloud builds submit --config=services/ingest/cloudbuild.yaml .
+	gcloud run deploy ingest --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/ingest:latest \
+		--service-account=sa-ingest@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app \
+		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
+		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
+		--vpc-egress=private-ranges-only --ingress=internal
+	gcloud builds submit --config=services/dashboard_api/cloudbuild.yaml .
+	gcloud run deploy dashboard-api --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/dashboard-api:latest \
+		--service-account=sa-dashboard-api@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST) \
+		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
+		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
+		--vpc-egress=private-ranges-only --memory=1Gi \
+		--no-cpu-throttling --min-instances=1
+	gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml .
+	$(eval TOOLBOX_URL := $(shell gcloud run services describe toolbox --region=$(OUROBOROS_REGION) --format='value(status.url)'))
+	gcloud run deploy toolbox-public --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/toolbox-public:latest \
+		--service-account=sa-toolbox-public@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),TOOLBOX_BACKEND_URL=$(TOOLBOX_URL) \
+		--allow-unauthenticated
+
+deploy-infra: ## usage: make deploy-infra ENV=dev
 	terraform -chdir=infra init
 	terraform -chdir=infra apply -var-file=environments/$(ENV).tfvars
-	@echo "TODO (Phase 3+): per-service cloud run deploy; TODO (Phase 5.5): agent engine deploy — no service has application code yet"
+
+deploy-agent-engine: ## needs .env populated (AGENT_ENGINE_RESOURCE_NAME set once an engine exists, else this creates one -- add the printed resource name to .env afterward)
+	TOOLBOX_MCP_URL=$$(gcloud run services describe toolbox --region=$(OUROBOROS_REGION) --format='value(status.url)') \
+		uv run --env-file .env python -m agents.deploy.deploy
 
 seed: ## loads fixtures/projects/demo.yaml — idempotent, safe to re-run
 	docker compose up -d postgres

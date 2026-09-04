@@ -50,6 +50,16 @@ locals {
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # Found live deploying Phase 5's toolbox service: DB_PASSWORD is injected via
+      # --set-secrets, which Cloud Run itself must read on the revision's behalf.
+      "roles/secretmanager.secretAccessor",
+    ]
+    sa-toolbox-public = [
+      "roles/logging.logWriter",
+      "roles/cloudtrace.agent",
+      # Reads PARALLEL_MCP_TOKEN to check the inbound bearer token, and mints its own
+      # ID token (via IAM Credentials, not a stored key) to call the private toolbox.
+      "roles/secretmanager.secretAccessor",
     ]
     sa-agent-engine = [
       "roles/aiplatform.user",
@@ -59,6 +69,11 @@ locals {
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # Found live (docs/DECISIONS.md #066): the deployed agent's own safety-sanitization
+      # tool calls Model Armor directly, not just sa-ingest's ingestion-time pass — a real
+      # 56-claim CLEAR run failed every specialist claim with `403 Permission
+      # 'modelarmor.templates.useToSanitizeUserPrompt' denied` until this was added.
+      "roles/modelarmor.user",
     ]
     sa-scheduler = [
       "roles/run.invoker",

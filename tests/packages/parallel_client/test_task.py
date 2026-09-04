@@ -9,8 +9,7 @@ import json
 
 import pytest
 
-from packages.claims.enums import ClaimCategory, ClaimKind, Confidence
-from packages.claims.models import Claim, SourceRef
+from packages.claims.enums import Confidence
 from packages.parallel_client.task import _fit_spec_and_input, build_input, run, should_escalate
 
 _SMALL_SPEC = {
@@ -19,22 +18,6 @@ _SMALL_SPEC = {
     "required": ["a"],
     "additionalProperties": False,
 }
-
-
-def _claim(priority: int) -> Claim:
-    source = SourceRef(asset_id="asset-1", page=1, excerpt="x")
-    return Claim.new(
-        project_id="demo",
-        studio_id="studio-1",
-        kind=ClaimKind.LEGAL,
-        category=ClaimCategory.BRAND,
-        entity_text="Acme",
-        claim_text="Acme appears",
-        language="en",
-        source=source,
-        jurisdictions=["us"],
-        priority=priority,
-    )
 
 
 def test_build_input_caps_at_max_chars() -> None:
@@ -65,15 +48,15 @@ def test_forbidden_processor_prefix_raises() -> None:
 
 
 def test_should_escalate_low_confidence_high_priority() -> None:
-    assert should_escalate(Confidence.LOW, _claim(priority=1)) is True
-    assert should_escalate(Confidence.LOW, _claim(priority=2)) is True
+    assert should_escalate(Confidence.LOW, 1) is True
+    assert should_escalate(Confidence.LOW, 2) is True
 
 
 def test_should_escalate_false_when_priority_too_low() -> None:
-    assert should_escalate(Confidence.LOW, _claim(priority=3)) is False
+    assert should_escalate(Confidence.LOW, 3) is False
 
 
 def test_should_escalate_false_when_confidence_not_low() -> None:
-    assert should_escalate(Confidence.MEDIUM, _claim(priority=1)) is False
-    assert should_escalate(Confidence.HIGH, _claim(priority=1)) is False
-    assert should_escalate(Confidence.UNKNOWN, _claim(priority=1)) is False
+    assert should_escalate(Confidence.MEDIUM, 1) is False
+    assert should_escalate(Confidence.HIGH, 1) is False
+    assert should_escalate(Confidence.UNKNOWN, 1) is False

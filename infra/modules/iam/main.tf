@@ -136,6 +136,16 @@ locals {
       # (harmless, already-granted, correct in spirit, and useful for anyone
       # reading Cloud Logging directly).
       "roles/logging.viewer",
+      # Phase 7 introduced Terraform's first `google_pubsub_topic`/`google_pubsub_subscription`
+      # and `google_cloud_scheduler_job` resources -- found live (docs/DECISIONS.md #101):
+      # `terraform-apply` (also `sa-ci-deploy`) had never actually run to completion in CI
+      # before (it's gated behind `deploy-services`, which was broken until the two fixes
+      # above), so this gap sat completely hidden until CI finally got this far for the
+      # first time. `403 pubsub.topics.get`/`403 cloudscheduler.jobs.get` on resources this
+      # session already created by hand (as this sandbox's own owner-level user) confirmed
+      # `sa-ci-deploy` itself never had any role covering either service.
+      "roles/pubsub.admin",
+      "roles/cloudscheduler.admin",
     ]
   }
 

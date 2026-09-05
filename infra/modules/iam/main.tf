@@ -146,6 +146,21 @@ locals {
       # `sa-ci-deploy` itself never had any role covering either service.
       "roles/pubsub.admin",
       "roles/cloudscheduler.admin",
+      # Same root cause as #101, found in the very next CI run once the pubsub/
+      # scheduler gap was fixed: `terraform-apply` had *never* successfully
+      # refreshed state for these resource types either, for the exact same
+      # reason (gated behind `deploy-services`, broken until #100). One CI run
+      # surfaced all four at once (Terraform batches refresh-phase errors):
+      # BigQuery (`google_bigquery_dataset`/`_table`, Phase 2), Cloud SQL
+      # (`google_sql_database_instance`/`_database`/`_user`, Phase 1-2),
+      # Eventarc (`google_eventarc_trigger`, Phase 3), Model Armor
+      # (`google_model_armor_template`, Phase 3) -- every one of these modules
+      # predates this session, meaning `terraform-apply` in CI has likely never
+      # once succeeded in this project's history (docs/DECISIONS.md #102).
+      "roles/bigquery.dataOwner",
+      "roles/cloudsql.admin",
+      "roles/eventarc.admin",
+      "roles/modelarmor.admin",
     ]
   }
 

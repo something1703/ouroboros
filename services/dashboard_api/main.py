@@ -18,6 +18,7 @@ import google.auth
 import google.auth.transport.requests as gauth_requests
 import google.cloud.storage as storage
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -50,6 +51,21 @@ log = get_logger(__name__)
 
 app = FastAPI(title="Ouroboros Dashboard API")
 instrument_fastapi(app)
+
+# Phase 8.2: web/ calls this API from a different origin (localhost:5173 in dev, the
+# deployed web app's own origin once known) -- browsers block that without CORS
+# headers, found live while researching the frontend build (no CORSMiddleware existed
+# anywhere in this codebase before now). Empty-until-set, same pattern as
+# GOOGLE_OAUTH_CLIENT_ID: comma-separated origins, no wildcard (credentialed requests
+# -- the GIS bearer token -- can't use `allow_origins=["*"]` per the CORS spec anyway).
+_cors_origins = [o for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 _projector = Projector()
 
@@ -158,6 +174,12 @@ class MetricsResponse(BaseModel):
     current_cadence: str
 
 
+class TriggerAllResponse(BaseModel):
+    total: int
+    triggered: int
+    errors: list[dict[str, str]]
+
+
 @app.exception_handler(NotFound)
 def _not_found_handler(_request: Request, exc: NotFound) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
@@ -171,6 +193,13 @@ def _conflict_handler(_request: Request, exc: Conflict) -> JSONResponse:
 @app.get("/status")
 def status() -> dict[str, object]:
     return {"ok": True, "service": "dashboard_api"}
+
+
+@app.get("/me", response_model=UserContext)
+def get_me(user: UserContext = Depends(get_current_user)) -> UserContext:
+    """Phase 8.2: the web app's own role banner and role-gated quick actions need to
+    know the signed-in caller's role without piggybacking on a business endpoint."""
+    return user
 
 
 @app.post("/projects/{project_id}/assets", response_model=UploadResponse)
@@ -367,6 +396,34 @@ def get_metrics(project_id: str, _user: UserContext = Depends(get_current_user))
         days_to_release=days_left,
         current_cadence=frequency_for(days_left),
     )
+
+
+@app.post("/projects/{project_id}/monitors/trigger-all", response_model=TriggerAllResponse)
+def trigger_all_monitors(
+    project_id: str, _user: UserContext = Depends(get_current_user)
+) -> TriggerAllResponse:
+    """Phase 8.2's "Trigger monitors" quick action: unlike
+    `/internal/jobs/trigger-monitor/{monitor_id}` (service-account-only, one specific
+    monitor — PHASE_07.md §7.6's demo-forcing tool), this is GIS-gated and project-
+    scoped, forcing every active Monitor in one project off-schedule at once, the
+    shape an end user actually wants from a single button."""
+    with session_scope() as session:
+        ProjectRepo.require(session, project_id)
+        monitors = [
+            m for m, pid, _release_date in MonitorRepo.list_all_active(session) if pid == project_id
+        ]
+
+    triggered = 0
+    errors: list[dict[str, str]] = []
+    for monitor in monitors:
+        try:
+            monitor_trigger(monitor.monitor_id)
+            triggered += 1
+        except Exception as exc:
+            log.warning("trigger_all_monitor_failed", monitor_id=monitor.monitor_id, error=str(exc))
+            errors.append({"monitor_id": monitor.monitor_id, "error": str(exc)})
+
+    return TriggerAllResponse(total=len(monitors), triggered=triggered, errors=errors)
 
 
 def _require_override_role(user: UserContext, claim_kind: str) -> None:

@@ -78,7 +78,7 @@ jobs:
           gcloud run deploy dashboard-api --region="$OUROBOROS_REGION" \
             --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/dashboard-api:latest" \
             --service-account="sa-dashboard-api@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID},SELF_BASE_URL=${SELF_BASE_URL}" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID},SELF_BASE_URL=${SELF_BASE_URL},CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}" \
             --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
             --allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
             --vpc-egress=private-ranges-only --memory=1Gi \
@@ -116,6 +116,9 @@ jobs:
           # the expected `audience` for /internal/* routes' own identity-token check
           # now that the whole service is --allow-unauthenticated (docs/DECISIONS.md).
           SELF_BASE_URL: https://dashboard-api-492372502792.us-central1.run.app
+          # Phase 8.2: web/'s origin(s), so its CORS preflight succeeds -- defaults to
+          # local dev only until a real production web app URL exists to set here.
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS || 'http://localhost:5173' }}
 
       - name: Build + deploy toolbox-public
         run: |

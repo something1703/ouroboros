@@ -335,3 +335,22 @@ def test_internal_endpoint_works_for_an_authorized_internal_caller(client: TestC
     response = client.post("/internal/jobs/tighten")
     assert response.status_code == 200
     assert response.json() == {"total": 0, "updated": 0, "unchanged": 0, "errors": []}
+
+
+def test_get_me_returns_the_signed_in_user(client: TestClient) -> None:
+    _as("rvsrathore17@gmail.com", "legal")
+    response = client.get("/me")
+    assert response.status_code == 200
+    assert response.json() == {"email": "rvsrathore17@gmail.com", "role": "legal"}
+
+
+def test_get_me_requires_auth(client: TestClient) -> None:
+    assert client.get("/me").status_code == 422  # missing Authorization header
+
+
+def test_trigger_all_monitors_with_none_active(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.post("/projects/demo/monitors/trigger-all")
+    assert response.status_code == 200
+    assert response.json() == {"total": 0, "triggered": 0, "errors": []}

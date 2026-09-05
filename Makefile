@@ -39,6 +39,12 @@ GOOGLE_OAUTH_CLIENT_ID ?=
 # (doesn't require the service to already exist to compute), used as the expected
 # `audience` for /internal/* routes' own identity-token check (docs/DECISIONS.md).
 SELF_BASE_URL ?= https://dashboard-api-492372502792.us-central1.run.app
+# Phase 8.2: web/'s dev server origin, so the browser's CORS preflight succeeds. A
+# single value for now (local dev only, no production web origin exists yet) --
+# --set-env-vars itself uses commas as its own pair-delimiter, so a *second*,
+# comma-separated origin here will need gcloud's `^;^` custom-delimiter syntax
+# instead of the plain comma-joined form every other var below already uses.
+CORS_ALLOWED_ORIGINS ?= http://localhost:5173
 
 deploy: deploy-services deploy-infra deploy-agent-engine ## usage: make deploy ENV=dev -- mirrors .github/workflows/deploy.yml's three jobs, in the same order (services before infra: an Eventarc trigger's destination and any run.invoker binding on a service both need that service to already exist)
 
@@ -64,7 +70,7 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 	gcloud run deploy dashboard-api --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/dashboard-api:latest \
 		--service-account=sa-dashboard-api@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
-		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST),GOOGLE_OAUTH_CLIENT_ID=$(GOOGLE_OAUTH_CLIENT_ID),SELF_BASE_URL=$(SELF_BASE_URL) \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST),GOOGLE_OAUTH_CLIENT_ID=$(GOOGLE_OAUTH_CLIENT_ID),SELF_BASE_URL=$(SELF_BASE_URL),CORS_ALLOWED_ORIGINS=$(CORS_ALLOWED_ORIGINS) \
 		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
 		--allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --memory=1Gi \

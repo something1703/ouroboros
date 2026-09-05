@@ -120,6 +120,17 @@ locals {
       "roles/aiplatform.user",
       "roles/storage.admin",
       "roles/serviceusage.serviceUsageConsumer",
+      # `gcloud builds submit` (every "Build + deploy X" CI step) streams build
+      # output from Cloud Build's default logs bucket, which requires the caller
+      # to be a project Viewer/Owner or hold `roles/logging.viewer` -- found live
+      # (docs/DECISIONS.md #100): every CI `deploy` run since at least Phase 6 was
+      # failing at the *first* build step with "This tool can only stream logs if
+      # you are Viewer/Owner of the project", even though the underlying Cloud
+      # Build itself succeeded -- the missing permission killed the log-streaming
+      # poll, which `gcloud` treats as a fatal error, so no service after the
+      # first ever got deployed by CI (every real deploy this session was done by
+      # hand, bypassing this bug).
+      "roles/logging.viewer",
     ]
   }
 

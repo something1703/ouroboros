@@ -37,7 +37,7 @@ ARTIFACTS_BUCKET ?= ouroboros-507503-artifacts-dev
 deploy: deploy-services deploy-infra deploy-agent-engine ## usage: make deploy ENV=dev -- mirrors .github/workflows/deploy.yml's three jobs, in the same order (services before infra: an Eventarc trigger's destination and any run.invoker binding on a service both need that service to already exist)
 
 deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github/workflows/deploy.yml for the canonical, CI-run version of these same commands)
-	gcloud builds submit --config=services/toolbox/cloudbuild.yaml .
+	gcloud builds submit --config=services/toolbox/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	gcloud run deploy toolbox --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/toolbox:latest \
 		--service-account=sa-toolbox@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
@@ -45,7 +45,7 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 		--set-secrets=TOOLBOX_DB_PASSWORD=DB_PASSWORD:latest \
 		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --ingress=all --port=5000
-	gcloud builds submit --config=services/ingest/cloudbuild.yaml .
+	gcloud builds submit --config=services/ingest/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	gcloud run deploy ingest --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/ingest:latest \
 		--service-account=sa-ingest@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
@@ -54,7 +54,7 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --ingress=internal \
 		--memory=2Gi --cpu=2 --timeout=600
-	gcloud builds submit --config=services/dashboard_api/cloudbuild.yaml .
+	gcloud builds submit --config=services/dashboard_api/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	gcloud run deploy dashboard-api --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/dashboard-api:latest \
 		--service-account=sa-dashboard-api@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
@@ -63,20 +63,20 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --memory=1Gi \
 		--no-cpu-throttling --min-instances=1
-	gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml .
+	gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	$(eval TOOLBOX_URL := $(shell gcloud run services describe toolbox --region=$(OUROBOROS_REGION) --format='value(status.url)'))
 	gcloud run deploy toolbox-public --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/toolbox-public:latest \
 		--service-account=sa-toolbox-public@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
 		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),TOOLBOX_BACKEND_URL=$(TOOLBOX_URL) \
 		--allow-unauthenticated
-	gcloud builds submit --config=services/webhook_receiver/cloudbuild.yaml .
+	gcloud builds submit --config=services/webhook_receiver/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	gcloud run deploy webhook-receiver --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/webhook-receiver:latest \
 		--service-account=sa-webhook@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
 		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
 		--allow-unauthenticated
-	gcloud builds submit --config=services/reverify_worker/cloudbuild.yaml .
+	gcloud builds submit --config=services/reverify_worker/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
 	gcloud run deploy reverify-worker --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/reverify-worker:latest \
 		--service-account=sa-reverify@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \

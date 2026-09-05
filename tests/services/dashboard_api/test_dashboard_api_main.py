@@ -354,3 +354,28 @@ def test_trigger_all_monitors_with_none_active(client: TestClient, db_session: S
     response = client.post("/projects/demo/monitors/trigger-all")
     assert response.status_code == 200
     assert response.json() == {"total": 0, "triggered": 0, "errors": []}
+
+
+def test_create_run_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    response = client.post("/projects/demo/runs", json={"asset_id": "asset-1"})
+    assert response.status_code == 422  # missing Authorization header
+
+
+def test_create_run_producer_403s(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.post("/projects/demo/runs", json={"asset_id": "asset-1"})
+    assert response.status_code == 403
+
+
+def test_create_run_starts_a_run(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("rvsrathore17@gmail.com", "legal")
+    monkeypatch.setattr(dashboard_api, "start_run", lambda *_a, **_kw: "run-123")
+
+    response = client.post("/projects/demo/runs", json={"asset_id": "asset-1", "mode": "clear"})
+    assert response.status_code == 200
+    assert response.json() == {"run_id": "run-123"}

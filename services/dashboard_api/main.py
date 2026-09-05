@@ -521,12 +521,23 @@ def _timeline_claim(session: Session, claim: Claim) -> TimelineClaim:
 
 
 @app.post("/projects/{project_id}/runs", response_model=StartRunResponse)
-async def create_run(project_id: str, body: StartRunRequest) -> StartRunResponse:
+async def create_run(
+    project_id: str, body: StartRunRequest, user: UserContext = Depends(get_current_user)
+) -> StartRunResponse:
     # Must be `async def`, not a plain sync handler -- found live: a sync FastAPI route
     # runs in Starlette's worker threadpool, not on the event loop thread, so
     # `start_run`'s internal `asyncio.create_task` had no running loop to attach to
     # ("RuntimeError: no running event loop"). An async handler runs directly on the
     # event loop, where create_task works as intended.
+    #
+    # Found live while wiring 8.2's "Run CLEAR"/"Run TRUE CUT" quick actions: this
+    # route had no auth dependency at all, so once the service went
+    # `--allow-unauthenticated` (docs/DECISIONS.md #107) anyone on the internet could
+    # trigger a real, billed Agent Engine run. `producer` is read-only per PHASE_08.md
+    # §8.2 (it can never override a claim either -- `_require_override_role`), so it's
+    # blocked here too.
+    if user.role == "producer":
+        raise HTTPException(403, "role 'producer' cannot start a run")
     with session_scope() as session:
         ProjectRepo.require(session, project_id)
     run_id = start_run(project_id, body.asset_id, mode=body.mode)

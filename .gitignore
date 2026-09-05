@@ -24,6 +24,12 @@ web/node_modules/
 web/dist/
 web/.vite/
 node_modules/
+web/tmp/
+
+# Leftover create-vite starter files, unused once App.tsx/index.css were rewritten
+# for Phase 8.2 (rm is blocked in this sandbox, so ignored rather than deleted)
+web/src/App.css
+web/src/assets/
 
 # Env / secrets
 .env

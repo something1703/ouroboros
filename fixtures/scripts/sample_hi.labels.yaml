@@ -1,0 +1,19 @@
+# Hand-labelled entities for fixtures/scripts/sample_hi.pdf (Hindi), for the
+# Phase 3.2 multilingual recall test ("Same test on the non-English script with
+# >= 80% recall"). Compact synthetic script, same rationale as sample_en.labels.yaml.
+
+entities:
+  - entity_text: "Vande Mataram"
+    category: music
+  - entity_text: "Amitabh Bachchan"
+    category: person
+  - entity_text: "Tata Motors"
+    category: brand
+  - entity_text: "India Gate"
+    category: location
+  - entity_text: "Amul"
+    category: brand
+  - entity_text: "Mumbai"
+    category: location
+  - entity_text: "Sachin Tendulkar"
+    category: person

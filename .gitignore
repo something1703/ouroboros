@@ -43,8 +43,10 @@ infra/**/crash.log
 infra/**/override.tf
 infra/**/override.tf.json
 
-# Fixtures (large media go to GCS, not git)
-fixtures/scripts/*.pdf
+# Fixtures: large/real media go to GCS, not git (check-added-large-files also
+# catches this at 2MB). Small synthetic fixtures we authored ourselves (e.g. the
+# compact sample screenplay PDFs) are committed directly — no GCS round trip
+# needed just to run `make test-live` or `make seed` on a fresh clone.
 fixtures/cuts/*.mp4
 fixtures/cuts/*.mov
 !fixtures/**/.gitkeep
@@ -59,3 +61,7 @@ docs/evidence/**/*.mov
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Scratch/throwaway scripts used for live GCP diagnostics during development —
+# never meant to be committed, underscore-prefixed by convention to mark them as such.
+scripts/_*

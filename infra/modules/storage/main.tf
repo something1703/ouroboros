@@ -12,6 +12,23 @@ resource "google_storage_bucket" "intake" {
   }
 }
 
+# Vertex AI's own Gemini service agent (not sa-ingest, not whoever calls the API) needs
+# read access to a gs:// object before it will fetch it for types.Part.from_uri — found
+# live: extract_script_claims failed with a 403 from
+# service-<project-number>@gcp-sa-aiplatform.iam.gserviceaccount.com until this was
+# granted. See docs/DECISIONS.md.
+resource "google_project_service_identity" "vertex_ai" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "aiplatform.googleapis.com"
+}
+
+resource "google_storage_bucket_iam_member" "vertex_ai_reads_intake" {
+  bucket = google_storage_bucket.intake.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_project_service_identity.vertex_ai.email}"
+}
+
 resource "google_storage_bucket" "artifacts" {
   project                     = var.project_id
   name                        = "${var.project_id}-artifacts-${var.env}"

@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "is_living": {"type": ["boolean", "null"], "description": "True if the person is currently living, false if deceased, null if unknown"},
+    "is_public_figure": {"type": ["boolean", "null"], "description": "True if widely recognized as a public figure"},
+    "estate_or_representation": {"type": ["string", "null"], "description": "Estate, agent, or representative that controls likeness/publicity rights, if documented"},
+    "right_of_publicity_notes": {"type": "string", "description": "Per-jurisdiction right-of-publicity considerations for depicting this person"},
+    "known_litigation_over_depiction": {"type": ["string", "null"], "description": "Any documented lawsuits or disputes over how this person has been depicted"},
+    "consent_recommended": {"type": "boolean", "description": "True if obtaining consent/release is recommended before depiction"},
+    "territory_notes": {"type": "string", "description": "Jurisdiction-specific notes for each requested territory"}
+  },
+  "required": ["is_living", "is_public_figure", "estate_or_representation", "right_of_publicity_notes", "known_litigation_over_depiction", "consent_recommended", "territory_notes"],
+  "additionalProperties": false
+}

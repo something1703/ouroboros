@@ -1,0 +1,480 @@
+# MCP Toolbox for Databases config. Format verified 2026-09-03 directly against the
+# genai-toolbox README (raw.githubusercontent.com/googleapis/genai-toolbox/main/README.md)
+# and Google's "Agentic RAG with ADK, MCP Toolbox, and Cloud SQL" codelab — not guessed.
+#
+# Two consumers (ARCHITECTURE.md §2.2): ADK agents get ledger_read + ledger_write;
+# Parallel Task runs get parallel_readonly (== ledger_read) only, via the token-protected
+# public proxy added in Phase 5.6 — never ledger_write.
+#
+# Local vs Cloud Run: one `postgres`-type source, DB_HOST/DB_PASSWORD differ by
+# environment (local: docker-compose postgres, password auth; Cloud Run: the Cloud SQL
+# private IP via the Serverless VPC Access connector, same password auth — see
+# docs/DECISIONS.md #022 on why this uses password auth in both places rather than the
+# `cloud-sql-postgres` source kind's IAM-auth mode, which needs an IAM DB user we haven't
+# provisioned yet).
+
+kind: source
+name: ouroboros_pg
+type: postgres
+host: ${TOOLBOX_DB_HOST}
+port: ${TOOLBOX_DB_PORT}
+database: ${TOOLBOX_DB_NAME}
+user: ${TOOLBOX_DB_USER}
+password: ${TOOLBOX_DB_PASSWORD}
+
+---
+# --- Reads ---
+
+kind: tool
+name: get_claim
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Get one claim by id, with its latest evidence cycle and current risk assessment.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim_id to look up.
+statement: |
+  SELECT
+    c.claim_id, c.project_id, c.studio_id, c.kind, c.category, c.entity_text,
+    c.normalized_text, c.claim_text, c.language, c.source, c.jurisdictions,
+    c.priority, c.status, c.prior_production_note, c.created_at, c.updated_at,
+    e.evidence_id, e.cycle, e.method, e.parallel_run_id, e.output AS evidence_output,
+    e.basis AS evidence_basis, e.overall_confidence, e.created_at AS evidence_created_at,
+    r.level AS risk_level, r.score AS risk_score, r.rationale AS risk_rationale,
+    EXISTS (SELECT 1 FROM monitors m WHERE m.claim_id = c.claim_id) AS has_monitor
+  FROM claims c
+  LEFT JOIN LATERAL (
+    SELECT * FROM evidence WHERE evidence.claim_id = c.claim_id ORDER BY cycle DESC LIMIT 1
+  ) e ON true
+  LEFT JOIN risk r ON r.claim_id = c.claim_id
+  WHERE c.claim_id = $1;
+
+---
+kind: tool
+name: list_claims
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  List claims for a project, optionally filtered by status and/or category.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to list claims for.
+  - name: status
+    type: string
+    description: "Filter by status (pending, triaged, verifying, verified, escalated, error, stale). Pass an empty string for no filter."
+  - name: category
+    type: string
+    description: "Filter by category (music, brand, person, location, artwork, quote, event, statistic, attribution, archival, identity). Pass an empty string for no filter."
+  - name: result_limit
+    type: integer
+    description: Maximum rows to return.
+    default: 50
+statement: |
+  SELECT claim_id, project_id, kind, category, entity_text, claim_text, priority, status, created_at,
+    source ->> 'channel' AS channel
+  FROM claims
+  WHERE project_id = $1
+    AND ($2 = '' OR status = $2)
+    AND ($3 = '' OR category = $3)
+  ORDER BY created_at DESC
+  LIMIT $4;
+
+---
+kind: tool
+name: get_prior_decisions
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Studio memory: prior clearance decisions for an entity, most recent first. Used to
+  skip re-research when a recent decision already exists (ADK_AGENTS.md §2.1).
+parameters:
+  - name: studio_id
+    type: string
+    description: The studio to look up memory for.
+  - name: entity_normalized
+    type: string
+    description: The normalized entity name (packages.claims.normalize.normalize_text output).
+statement: |
+  SELECT id, category, entity_normalized, decision, note, decided_at
+  FROM prior_decisions
+  WHERE studio_id = $1 AND entity_normalized = $2
+  ORDER BY decided_at DESC;
+
+---
+kind: tool
+name: get_project
+type: postgres-sql
+source: ouroboros_pg
+description: Get one project by id.
+parameters:
+  - name: project_id
+    type: string
+    description: The project_id to look up.
+statement: |
+  SELECT project_id, studio_id, title, release_date, shooting_countries,
+         distribution_territories, budget_cap_usd, created_at
+  FROM projects
+  WHERE project_id = $1;
+
+---
+# Mirrors packages/parallel_client/cost.py's check_budget()/CostMeter's own spend+cap
+# query exactly — added so agents/ouroboros/clear/specialist.py's direct-DB budget
+# check can go through Toolbox instead. Found live: the deployed Agent Engine's runtime
+# has no VPC path to Cloud SQL's private IP (unlike Toolbox, a properly VPC-connected
+# Cloud Run service), so a *direct* SQLAlchemy connection from inside the agent process
+# just hangs until timeout — every real call to packages/ledger/db.py's engine from
+# Agent Engine fails this way, regardless of how large max_connections is (see
+# docs/DECISIONS.md #062).
+kind: tool
+name: check_budget
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Get a project's total spend so far (sum of every cost_events row) and its budget
+  cap, so a caller can decide whether it's already over budget.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to check.
+statement: |
+  SELECT
+    COALESCE((SELECT SUM(cost_usd) FROM cost_events WHERE project_id = $1), 0) AS spend_usd,
+    COALESCE((SELECT budget_cap_usd FROM projects WHERE project_id = $1), 10.00) AS cap_usd;
+
+---
+# --- Writes (ledger_write only — never exposed to Parallel) ---
+
+kind: tool
+name: record_evidence
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Insert a new evidence cycle for a claim. `expected_cycle` must equal
+  (current max cycle for this claim) + 1 — the insert is a no-op (0 rows) if it
+  doesn't, guarding against writing evidence out of order.
+parameters:
+  - name: evidence_id
+    type: string
+    description: ULID for the new evidence row.
+  - name: claim_id
+    type: string
+    description: The claim this evidence is for.
+  - name: expected_cycle
+    type: integer
+    description: The cycle number this evidence should land as (current max + 1).
+  - name: method
+    type: string
+    description: "One of: search, task, responses, entity_search, extract, grounding."
+  - name: output_json
+    type: string
+    description: The structured Task/Responses output, as a JSON string.
+  - name: basis_json
+    type: string
+    description: The FieldBasis array, as a JSON string.
+  - name: overall_confidence
+    type: string
+    description: "One of: high, medium, low, unknown."
+  - name: cost_usd
+    type: float
+    description: Cost of this verification cycle in USD.
+  - name: parallel_run_id
+    type: string
+    description: "The Parallel Task run_id (trun_...) this evidence came from, if any. Pass an empty string for none (e.g. method=search has no Task run)."
+  - name: processor
+    type: string
+    description: "The Parallel Task processor used (e.g. core-fast, pro), if any. Pass an empty string for none."
+statement: |
+  WITH next_cycle AS (
+    SELECT COALESCE(MAX(cycle), 0) + 1 AS n FROM evidence WHERE evidence.claim_id = $2
+  )
+  INSERT INTO evidence (evidence_id, claim_id, cycle, method, output, basis, overall_confidence, cost_usd, parallel_run_id, processor, created_at)
+  SELECT $1, $2, next_cycle.n, $4, $5::jsonb, $6::jsonb, $7, $8, NULLIF($9, ''), NULLIF($10, ''), now()
+  FROM next_cycle
+  WHERE next_cycle.n = $3
+  RETURNING evidence_id, cycle;
+
+---
+kind: tool
+name: set_status
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Update a claim's status and append a verification_history entry recording the transition.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to update.
+  - name: new_status
+    type: string
+    description: "One of: pending, triaged, verifying, verified, escalated, error, stale."
+  - name: actor
+    type: string
+    description: "One of: ingest, agent, monitor, reverify_worker, human."
+  - name: note
+    type: string
+    description: Human-readable note explaining the transition.
+  - name: ref_json
+    type: string
+    description: "JSON object with routing context, e.g. {\"run_id\": \"...\"}."
+  - name: event_id
+    type: string
+    description: ULID for the new verification_history row.
+statement: |
+  WITH old AS (
+    SELECT status FROM claims WHERE claim_id = $1
+  ),
+  updated AS (
+    UPDATE claims SET status = $2, updated_at = now() WHERE claim_id = $1 RETURNING claim_id
+  )
+  INSERT INTO verification_history (event_id, claim_id, at, actor, from_status, to_status, note, ref)
+  SELECT $6, $1, now(), $3, old.status, $2, $4, $5::jsonb FROM old, updated
+  RETURNING event_id;
+
+---
+kind: tool
+name: note_prior_production_hit
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Studio memory (PHASE_07.md §7.5): record that ClaimTriage found a Parallel Memory hit
+  for this claim's entity in a prior production, so the claim view can surface
+  "Seen in previous production."
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to annotate.
+  - name: note
+    type: string
+    description: Short human-readable note about the prior hit (what/where it was seen).
+statement: |
+  UPDATE claims SET prior_production_note = $2, updated_at = now() WHERE claim_id = $1;
+
+---
+kind: tool
+name: record_risk
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Upsert the current risk assessment for a claim (one row per claim, latest wins) and
+  append the same assessment to risk_history (append-only) in one transaction.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim this assessment is for.
+  - name: evidence_id
+    type: string
+    description: The Evidence this assessment is based on.
+  - name: level
+    type: string
+    description: "One of: none, low, medium, high, blocking."
+  - name: score
+    type: float
+    description: Risk score in [0, 1].
+  - name: rationale
+    type: string
+    description: Human-readable rationale for the level and score.
+  - name: cost_band
+    type: string
+    description: "One of: none, <1k, 1k-10k, 10k-100k, >100k, unknown. Pass an empty string for null (not assessed)."
+  - name: remediation_suggested
+    type: boolean
+    description: True if RiskAssessor recommends a remediation (e.g. replace_brand, reshoot).
+  - name: remediation_kind
+    type: string
+    description: "One of: replace_brand, replace_music, reshoot, recut, obtain_release, none."
+  - name: territory_flags_json
+    type: string
+    description: JSON object mapping jurisdiction code to risk level, as a JSON string. Pass "{}" for none.
+statement: |
+  WITH upserted AS (
+    INSERT INTO risk (claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at)
+    VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9::jsonb, now())
+    ON CONFLICT (claim_id) DO UPDATE SET
+      evidence_id = EXCLUDED.evidence_id,
+      level = EXCLUDED.level,
+      score = EXCLUDED.score,
+      rationale = EXCLUDED.rationale,
+      cost_band = EXCLUDED.cost_band,
+      remediation_suggested = EXCLUDED.remediation_suggested,
+      remediation_kind = EXCLUDED.remediation_kind,
+      territory_flags = EXCLUDED.territory_flags,
+      assessed_at = EXCLUDED.assessed_at
+    RETURNING claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at
+  )
+  INSERT INTO risk_history (claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at)
+  SELECT claim_id, evidence_id, level, score, rationale, cost_band, remediation_suggested, remediation_kind, territory_flags, assessed_at FROM upserted
+  RETURNING id;
+
+---
+kind: tool
+name: record_monitor
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Upsert a Parallel Monitor record (one row per monitor_id) — called after a real,
+  successful monitor_create_snapshot/monitor_create_stream call, never for a failed one.
+parameters:
+  - name: monitor_id
+    type: string
+    description: The Parallel monitor id this record is for.
+  - name: claim_id
+    type: string
+    description: The claim this Monitor watches.
+  - name: monitor_type
+    type: string
+    description: "One of: snapshot, event_stream."
+  - name: task_run_id
+    type: string
+    description: "The Task run_id a snapshot Monitor watches. Pass an empty string for none (event_stream Monitors have no task_run_id)."
+  - name: query
+    type: string
+    description: "The live-web query an event_stream Monitor watches. Pass an empty string for none (snapshot Monitors have no query)."
+  - name: frequency
+    type: string
+    description: "One of: 1h, 1d, 1w."
+  - name: status
+    type: string
+    description: "One of: active, cancelled."
+statement: |
+  INSERT INTO monitors (monitor_id, claim_id, type, task_run_id, query, frequency, status, created_at)
+  VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, now())
+  ON CONFLICT (monitor_id) DO UPDATE SET
+    frequency = EXCLUDED.frequency,
+    status = EXCLUDED.status
+  RETURNING monitor_id;
+
+---
+# Mirrors packages/parallel_client/cost.py's CostRepo.record() — see check_budget above
+# for why this exists (Toolbox-routed, so it works from Agent Engine's runtime).
+kind: tool
+name: record_cost
+type: postgres-sql
+source: ouroboros_pg
+description: Record one cost_events row (an estimate, or a correction if sku ends in ".correction").
+parameters:
+  - name: project_id
+    type: string
+    description: The project this cost is billed against.
+  - name: claim_id
+    type: string
+    description: The claim this cost is for. Pass an empty string for none.
+  - name: api
+    type: string
+    description: "One of: search, task, responses, entity_search, extract, monitor_create, gemini."
+  - name: sku
+    type: string
+    description: "The priced SKU (e.g. 'search.fast', 'task.core-fast', 'task.core-fast.correction')."
+  - name: units
+    type: integer
+    description: Number of priced units this event covers.
+  - name: cost_usd
+    type: float
+    description: Cost in USD for this event (can be negative for a downward correction).
+statement: |
+  INSERT INTO cost_events (project_id, claim_id, api, sku, units, cost_usd, at)
+  VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, now());
+
+---
+# Backs agents/ouroboros/tools/firestore_tools.py::write_claim_view's `history_count` —
+# Toolbox-routed for the same reason as check_budget/record_cost above (docs/DECISIONS.md
+# #067): RiskAssessor's write_claim_view previously read this via a direct DB session,
+# which hangs forever from the Agent Engine's runtime.
+kind: tool
+name: count_history
+type: postgres-sql
+source: ouroboros_pg
+description: Count verification_history rows for one claim.
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to count history rows for.
+statement: |
+  SELECT count(*) AS count FROM verification_history WHERE claim_id = $1;
+
+---
+# Backs firestore_tools.py::write_project_summary's `counts_by_status` (docs/DECISIONS.md #067).
+kind: tool
+name: project_status_counts
+type: postgres-sql
+source: ouroboros_pg
+description: Count claims per status for a project.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to count claims for.
+statement: |
+  SELECT status, count(*) AS count FROM claims WHERE project_id = $1 GROUP BY status;
+
+---
+# Backs firestore_tools.py::write_project_summary's `counts_by_risk` (docs/DECISIONS.md #067).
+kind: tool
+name: project_risk_counts
+type: postgres-sql
+source: ouroboros_pg
+description: Count claims per risk level for a project.
+parameters:
+  - name: project_id
+    type: string
+    description: The project to count claims for.
+statement: |
+  SELECT r.level AS level, count(*) AS count
+  FROM risk r JOIN claims c ON c.claim_id = r.claim_id
+  WHERE c.project_id = $1
+  GROUP BY r.level;
+
+---
+# PHASE_06.md §6.1: FactAgent's ±20s transcript-window context. Returns the whole
+# segments array (small — a handful of KB even for a long cut) rather than filtering
+# by time range in SQL; `agents/ouroboros/tools/fact_tools.py` does the ±20s windowing
+# in code, the same "deterministic filtering, not LLM judgment" pattern as CLEAR's
+# specialist algorithm.
+kind: tool
+name: get_asset_segments
+type: postgres-sql
+source: ouroboros_pg
+description: Get a cut asset's full transcript segments array (empty for a script asset).
+parameters:
+  - name: asset_id
+    type: string
+    description: The asset to get segments for.
+statement: |
+  SELECT segments FROM assets WHERE asset_id = $1;
+
+---
+# --- Toolsets ---
+
+kind: toolset
+name: ledger_read
+tools:
+  - get_claim
+  - list_claims
+  - get_prior_decisions
+  - get_project
+  - check_budget
+  - count_history
+  - project_status_counts
+  - project_risk_counts
+  - get_asset_segments
+
+---
+kind: toolset
+name: ledger_write
+tools:
+  - record_evidence
+  - set_status
+  - note_prior_production_hit
+  - record_risk
+  - record_monitor
+  - record_cost
+
+---
+# Read-only subset exposed to Parallel Task runs (Phase 5.6) — never ledger_write.
+kind: toolset
+name: parallel_readonly
+tools:
+  - get_claim
+  - list_claims
+  - get_prior_decisions

@@ -29,6 +29,28 @@ resource "google_secret_manager_secret_version" "db_password" {
   secret_data = random_password.db_password.result
 }
 
+# Bearer token the public Toolbox proxy (services/toolbox_public, Phase 5.6) requires on
+# every request — ours to mint, not a credential issued by Parallel, so it's generated
+# the same way as db_password rather than left as a human-populated placeholder.
+resource "random_password" "parallel_mcp_token" {
+  length  = 40
+  special = false
+}
+
+resource "google_secret_manager_secret" "parallel_mcp_token" {
+  project   = var.project_id
+  secret_id = "PARALLEL_MCP_TOKEN"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "parallel_mcp_token" {
+  secret      = google_secret_manager_secret.parallel_mcp_token.id
+  secret_data = random_password.parallel_mcp_token.result
+}
+
 # Placeholders — containers only, no version. Populated by hand in Phase 7 (webhook
 # secret, once the Parallel webhook is registered) and Phase 7.4 (Slack webhook URL).
 resource "google_secret_manager_secret" "parallel_webhook_secret" {

@@ -12,12 +12,24 @@ locals {
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      "roles/modelarmor.user",
+      "roles/eventarc.eventReceiver",
+      # PHASE_06.md §6.4: uploads the low-res proxy MP4 + poster frame it generates to
+      # the artifacts bucket (packages/gemini_client/video.py::_generate_proxy_and_poster).
+      # Also the fix for a pre-existing, never-yet-exercised gap: the multi-chunk video
+      # path (_split_chunks) already uploads chunks back to the intake bucket the same
+      # way, which objectViewer alone could never have permitted either.
+      "roles/storage.objectCreator",
     ]
     sa-webhook = [
       "roles/pubsub.publisher",
       "roles/secretmanager.secretAccessor",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # PHASE_07.md §7.1: dedupes by writing a `webhook_dedupe/{webhook_id}` Firestore
+      # doc directly (not via Toolbox — this service has no ledger/Cloud SQL need at
+      # all, just Firestore for the dedup check).
+      "roles/datastore.user",
     ]
     sa-reverify = [
       "roles/aiplatform.user",
@@ -39,11 +51,30 @@ locals {
       "roles/pubsub.publisher",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # A signed upload URL is only valid for what the signing identity can itself do
+      # (PHASE_03.md §3.6) — needed for the actual `PUT` the client performs against it,
+      # separate from roles/iam.serviceAccountTokenCreator below (which lets it *sign*).
+      "roles/storage.objectCreator",
+      # Same principle, the read side (PHASE_06.md §6.4): a signed GET URL for the
+      # proxy MP4/poster JPEG is only valid for what sa-dashboard-api can itself read,
+      # regardless of the URL's own cryptographic validity — GCS still checks the
+      # signing identity's own permissions on the object at request time.
+      "roles/storage.objectViewer",
     ]
     sa-toolbox = [
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # Found live deploying Phase 5's toolbox service: DB_PASSWORD is injected via
+      # --set-secrets, which Cloud Run itself must read on the revision's behalf.
+      "roles/secretmanager.secretAccessor",
+    ]
+    sa-toolbox-public = [
+      "roles/logging.logWriter",
+      "roles/cloudtrace.agent",
+      # Reads PARALLEL_MCP_TOKEN to check the inbound bearer token, and mints its own
+      # ID token (via IAM Credentials, not a stored key) to call the private toolbox.
+      "roles/secretmanager.secretAccessor",
     ]
     sa-agent-engine = [
       "roles/aiplatform.user",
@@ -53,6 +84,11 @@ locals {
       "roles/cloudsql.client",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # Found live (docs/DECISIONS.md #066): the deployed agent's own safety-sanitization
+      # tool calls Model Armor directly, not just sa-ingest's ingestion-time pass — a real
+      # 56-claim CLEAR run failed every specialist claim with `403 Permission
+      # 'modelarmor.templates.useToSanitizeUserPrompt' denied` until this was added.
+      "roles/modelarmor.user",
     ]
     sa-scheduler = [
       "roles/run.invoker",
@@ -108,6 +144,16 @@ resource "google_project_iam_member" "bindings" {
   project = var.project_id
   role    = each.value.role
   member  = "serviceAccount:${google_service_account.sa[each.value.sa].email}"
+}
+
+# sa-dashboard-api signs GCS upload URLs (PHASE_03.md §3.6) with no private key on disk —
+# generate_signed_url() falls back to the IAM Credentials API's signBlob when given
+# service_account_email + access_token (python-storage's _sign_message), which needs
+# Service Account Token Creator granted to the SA *on itself* (self-impersonation).
+resource "google_service_account_iam_member" "dashboard_api_signs_urls" {
+  service_account_id = google_service_account.sa["sa-dashboard-api"].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.sa["sa-dashboard-api"].email}"
 }
 
 # --- Workload Identity Federation for GitHub Actions (sa-ci), no JSON keys ---

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {"type": "string", "enum": ["supported", "contradicted", "partially_supported", "unverifiable"]},
+    "corrected_statement": {"type": ["string", "null"], "description": "If contradicted or partially supported, the accurate statement"},
+    "key_evidence_summary": {"type": "string", "description": "2-4 sentences summarizing the strongest evidence for and against"},
+    "recommended_wording": {"type": ["string", "null"], "description": "Narration wording that would be defensible given the evidence"}
+  },
+  "required": ["verdict", "corrected_statement", "key_evidence_summary", "recommended_wording"],
+  "additionalProperties": false
+}

@@ -17,6 +17,28 @@ env:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    # Backs the packages/ledger integration tests (PHASE_02.md §2.2: "local postgres
+    # in CI via service container"). Credentials match docker-compose.yml exactly so
+    # local and CI runs behave the same.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ouroboros
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: localdev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d ouroboros"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_NAME: ouroboros
+      DB_USER: app
+      DB_PASSWORD: localdev
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +58,7 @@ jobs:
       - name: Type check (mypy)
         run: |
           uv run mypy --strict packages
+          uv run mypy --strict services
           uv run mypy config
 
       - name: Test (offline — recorded fixtures only)

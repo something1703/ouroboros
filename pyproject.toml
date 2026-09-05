@@ -30,6 +30,9 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "PyYAML",
     "python-ulid",
+    "pypdf",
+    "google-cloud-modelarmor>=0.7.1",
+    "openai>=3.7.0",
 ]
 
 [dependency-groups]
@@ -66,6 +69,12 @@ ignore = ["E501"]
 [tool.ruff.lint.isort]
 known-first-party = ["config", "packages", "services", "agents"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's own idiom for query/path params: `Query(default=...)` /
+# `Depends(...)` as an argument default is how FastAPI discovers them, not the
+# eager-evaluation bug B008 otherwise flags.
+extend-immutable-calls = ["fastapi.Query", "fastapi.Depends", "fastapi.Path"]
+
 [tool.ruff.format]
 quote-style = "double"
 
@@ -79,12 +88,22 @@ check_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
+# Note: disallow_any_explicit is deliberately NOT set here (it isn't part of
+# mypy's own --strict) — it fights Pydantic's mypy plugin, which synthesizes
+# Any-typed code at every `class X(BaseModel):` line.
 module = "packages.*"
 strict = true
-disallow_any_explicit = true
 
 [[tool.mypy.overrides]]
-module = ["vcr.*", "toolbox_core.*"]
+module = [
+    "vcr.*",
+    "toolbox_core.*",
+    "google.cloud",
+    "google.cloud.storage",
+    "google.cloud.storage.*",
+    "google.cloud.pubsub_v1",
+    "google.cloud.pubsub_v1.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

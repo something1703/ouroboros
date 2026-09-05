@@ -38,7 +38,22 @@ def get_client() -> firestore.Client:
 
 class Projector:
     def __init__(self, client: firestore.Client | None = None) -> None:
-        self._client = client or get_client()
+        # Lazy: `get_client()` needs real ADC, which a module-level `Projector()`
+        # (agents/ouroboros/tools/firestore_tools.py, services/dashboard_api/runs.py)
+        # doesn't have during CI's offline test collection (no google-github-actions/
+        # auth step there, deliberately — see packages/common/tracing.py's matching
+        # fix). Resolving on first real method call, not at construction, means
+        # importing these modules never needs credentials that only exist once deployed.
+        self._client_override = client
+        self._client_lazy: firestore.Client | None = None
+
+    @property
+    def _client(self) -> firestore.Client:
+        if self._client_override is not None:
+            return self._client_override
+        if self._client_lazy is None:
+            self._client_lazy = get_client()
+        return self._client_lazy
 
     def claim_view(
         self,

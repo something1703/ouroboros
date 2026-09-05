@@ -31,13 +31,23 @@ def configure_tracing(*, service: str) -> None:
     provider = TracerProvider(resource=resource)
 
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    exporter: SpanExporter
+    exporter: SpanExporter = ConsoleSpanExporter()
     if project_id:
         from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 
-        exporter = CloudTraceSpanExporter(project_id=project_id)  # type: ignore[no-untyped-call]
-    else:
-        exporter = ConsoleSpanExporter()
+        try:
+            exporter = CloudTraceSpanExporter(project_id=project_id)  # type: ignore[no-untyped-call]
+        except Exception:
+            # Found live: CI's lint-and-test job sets GOOGLE_CLOUD_PROJECT (other code
+            # needs it) but runs with no ADC at all (no google-github-actions/auth step
+            # — deliberately, since offline tests shouldn't need real GCP credentials).
+            # CloudTraceSpanExporter's own constructor eagerly opens a gRPC channel,
+            # which resolves credentials immediately rather than on first export, so
+            # every module-scope `configure_tracing()` call (services/*/main.py) crashed
+            # at import time before a single test could even be collected. Tracing is
+            # observability, not correctness — degrade to console output rather than
+            # block every offline run on real cloud credentials being present.
+            exporter = ConsoleSpanExporter()
 
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)

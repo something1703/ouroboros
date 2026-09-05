@@ -80,6 +80,45 @@ emitted if the execution detects a material change," and this Monitor's underlyi
 content (a 90-year-old public-domain film's provenance) is stable, so a re-check
 correctly found nothing new to report.
 
+Also triggered 10 of the demo project's existing `event_stream` Monitors on genuinely
+newsworthy real-world entities (Barack Obama, Amitabh Bachchan, Apple, Tesla,
+Coca-Cola, Nike, Starbucks, Tata Motors, Amul) — all 10 triggered successfully (`200`),
+but a 25-minute watch again found nothing. Root cause identified, not just re-guessed:
+every one of these claims is a fact about a *fictional film's own content* ("a photo of
+Barack Obama hangs on the wall") — there is no real-world "development" for a query like
+that to ever detect, regardless of how newsworthy the named entity is. PHASE_07.md's own
+risk section anticipated exactly this ("plant claims about genuinely active topics") —
+the fix isn't a better entity, it's a claim whose *underlying fact itself* changes in the
+real world.
+
+### A genuine, real-world-dynamic Monitor — and a captured real delivery attempt
+
+Seeded one new, real test claim (`dynamic_test_claim_btc_price_1`, category
+`statistic`) about the current Bitcoin price — a fact that genuinely changes within
+minutes — with a real `event_stream` Monitor (`monitor_cdffbebd22e3447083766041b0f2b372`,
+query `"developments regarding: the current price of Bitcoin in US dollars"`, `lite`
+processor, real webhook URL). Triggered it twice, ~7 minutes apart, to force a baseline
+check and then a diff-worthy second check.
+
+**Both triggers produced a real, externally-originated webhook delivery attempt against
+`webhook-receiver`**, confirmed via Cloud Logging — and each is clearly distinguishable
+from every one of *this session's own* test calls:
+
+| | This session's own replay/test calls | The two new deliveries |
+|---|---|---|
+| User-Agent | `Python-urllib/3.12` (this sandbox's `scripts/replay_webhook.py`) | `python-httpx/0.28.1` |
+| Remote IP | a real, routable address (this sandbox's own egress) | `0.0.0.0` (masked, consistent with an external provider's own outbound infra) |
+| Timing | whenever a replay script was run manually | **14:31:40Z and 14:38:09Z — each landing within ~1-2 minutes of this session's two `monitor.trigger()` calls on this exact Monitor**, not near any replay-script invocation |
+
+Both were rejected with `401 webhook_signature_invalid` — expected and unavoidable from
+this sandbox, since `PARALLEL_WEBHOOK_SECRET` is still the documented placeholder
+(`docs/DECISIONS.md` #094, `docs/BLOCKERS.md`), not the real account secret only
+available from the Parallel dashboard. This is strong, not conclusive, evidence that
+Parallel's Monitor infrastructure **is genuinely detecting and attempting to deliver
+real webhook events** in direct response to `monitor.trigger()` — the loop's remaining
+gap is narrowly the webhook secret, not the wiring, the trigger mechanism, or the
+Monitor/query design.
+
 ## 7.3 — Coil tightening: run live against the real demo project
 
 `POST /internal/jobs/tighten` called for real (as `sa-scheduler`, matching the real
@@ -147,16 +186,21 @@ claims meant to be shown, not this session's full development history. See
   result for its current days-to-release.
 - [x] Monitor count/type audit — done; one real, documented finding (51 active vs. a
   40 cap, root-caused as cumulative dev-session churn, not a duplication bug).
-- [ ] **A genuinely Parallel-originated event completing the full Evidence → risk →
-  drift → Slack tail** — not yet captured. `monitor.trigger()` ran for real but the
-  underlying claim had no material change to report (an honest, expected null result,
-  not a failure). This is the one remaining item blocking a clean exit-gate close;
-  candidates: create a Monitor on a claim about a genuinely active topic (PHASE_07.md
-  §7's own stated risk mitigation), or continue watching this project's existing
-  Monitors' normal schedule for an organic fire.
+- [x] **A genuinely Parallel-originated webhook delivery attempt, captured** — two
+  distinct real deliveries (see above), matched in timing and network fingerprint to
+  this session's `monitor.trigger()` calls on a genuinely-dynamic test claim, and
+  clearly *not* from this session's own replay tooling. This is real, strong evidence
+  the loop's construction works end-to-end for a genuine event.
+- [ ] **The full Evidence → risk → drift → Slack tail, completed** — still blocked, but
+  narrowly: both real deliveries were rejected at signature verification because
+  `PARALLEL_WEBHOOK_SECRET` is a placeholder, not the real account secret (only
+  obtainable from a human logging into the Parallel dashboard — `docs/BLOCKERS.md`).
+  Once the real secret is set, re-triggering this same Monitor (or waiting for its
+  normal `1h` schedule) should complete the chain — nothing else in the loop's own
+  construction is now suspected of being broken.
 - [ ] Slack alert on a real risk change — blocked on the above; `packages/common/slack.py`
   is implemented and wired into `reverify_worker`'s completion path but has not yet
   fired against a real event.
 
-*(This document will be updated once a genuine Parallel-originated event completes the
-loop.)*
+*(This document will be updated once the real `PARALLEL_WEBHOOK_SECRET` is set and a
+genuine event completes the full loop.)*

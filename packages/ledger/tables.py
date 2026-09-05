@@ -87,6 +87,7 @@ class ClaimRow(Base):
     jurisdictions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    prior_production_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - services/reverify_worker/Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/reverify-worker:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/reverify-worker:latest

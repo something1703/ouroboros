@@ -26,6 +26,10 @@ locals {
       "roles/secretmanager.secretAccessor",
       "roles/logging.logWriter",
       "roles/cloudtrace.agent",
+      # PHASE_07.md §7.1: dedupes by writing a `webhook_dedupe/{webhook_id}` Firestore
+      # doc directly (not via Toolbox — this service has no ledger/Cloud SQL need at
+      # all, just Firestore for the dedup check).
+      "roles/datastore.user",
     ]
     sa-reverify = [
       "roles/aiplatform.user",

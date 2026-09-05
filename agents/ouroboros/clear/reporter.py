@@ -10,7 +10,7 @@ prompts/reporter.md), no Python fork needed. ADK gives every agent instance at m
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 from google.adk.agents import LlmAgent
@@ -26,16 +26,19 @@ from agents.ouroboros.tools.firestore_tools import write_claim_summary, write_pr
 from agents.ouroboros.tools.parallel_tools import monitor_create_snapshot, monitor_create_stream
 from agents.ouroboros.tools.reporter_tools import gather_report_inputs
 from agents.ouroboros.tools.resilience import resilient_model
-from config.parallel import frequency_for
+from config.parallel import days_to_release, frequency_for
 
 _MONITOR_TOOL_NAMES = {"monitor_create_snapshot", "monitor_create_stream"}
 
 
-def _days_to_release(release_date_iso: object) -> int:
+def _release_date_from_state(release_date_iso: object) -> date | None:
+    """Session state stores `release_date` as a plain ISO string (or absent) —
+    `config.parallel.days_to_release` (shared with dashboard_api's coil-tightening job,
+    PHASE_07.md §7.3) takes a real `date` so both compute the exact same cadence from
+    the exact same type, not two subtly different parsers."""
     if not isinstance(release_date_iso, str) or not release_date_iso:
-        return 999  # unknown release date -> treat as far off, least-aggressive cadence
-    release = date.fromisoformat(release_date_iso[:10])
-    return max((release - datetime.now(UTC).date()).days, 0)
+        return None
+    return date.fromisoformat(release_date_iso[:10])
 
 
 def _record_monitor_and_count(
@@ -93,7 +96,9 @@ def _instruction(ctx: ReadonlyContext) -> str:
         project_id=ctx.state.get("project_id", ""),
         studio_id=ctx.state.get("studio_id", ""),
         webhook_url=f"{base_url}/webhooks/parallel/monitor",
-        monitor_frequency=frequency_for(_days_to_release(ctx.state.get("release_date"))),
+        monitor_frequency=frequency_for(
+            days_to_release(_release_date_from_state(ctx.state.get("release_date")))
+        ),
         primary_territory=jurisdictions[0] if jurisdictions else "",
     )
 

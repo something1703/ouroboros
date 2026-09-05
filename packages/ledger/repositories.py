@@ -10,6 +10,7 @@ Every method takes an open `Session` — callers control transaction boundaries 
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -177,6 +178,7 @@ def _claim_from_row(row: ClaimRow) -> Claim:
         jurisdictions=list(row.jurisdictions),
         priority=row.priority,
         status=row.status,
+        prior_production_note=row.prior_production_note,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -413,6 +415,25 @@ class RiskRepo:
         return _risk_from_row(row) if row else None
 
     @staticmethod
+    def list_assessed_at_by_project(
+        session: Session, project_id: str
+    ) -> list[tuple[str, str, datetime]]:
+        """`(claim_id, level, assessed_at)` for every claim in the project that has a
+        risk row — the project-wide snapshot `packages/claims/drift.py::reality_drift`
+        needs (PHASE_07.md §7.2): every claim contributes its *current* risk level to
+        the drift denominator, `changed` only for the one claim reverify_worker just
+        re-verified this event (see reverify_worker's own docstring on why that's the
+        correct, not merely simplified, reading of DATA_MODEL.md §6)."""
+        stmt = (
+            select(RiskRow.claim_id, RiskRow.level, RiskRow.assessed_at)
+            .join(ClaimRow, ClaimRow.claim_id == RiskRow.claim_id)
+            .where(ClaimRow.project_id == project_id)
+        )
+        return [
+            (claim_id, level, assessed_at) for claim_id, level, assessed_at in session.execute(stmt)
+        ]
+
+    @staticmethod
     def count_by_level(session: Session, project_id: str) -> dict[str, int]:
         """Aggregate counts for `Projector.project_summary` — `risk` has no
         `project_id` of its own, so this joins through `claims`."""
@@ -507,6 +528,54 @@ class MonitorRepo:
                 created_at=r.created_at,
             )
             for r in rows
+        ]
+
+    @staticmethod
+    def get(session: Session, monitor_id: str) -> MonitorRecord | None:
+        row = session.get(MonitorRow, monitor_id)
+        if row is None:
+            return None
+        return MonitorRecord(
+            monitor_id=row.monitor_id,
+            claim_id=row.claim_id,
+            type=row.type,
+            task_run_id=row.task_run_id,
+            query=row.query,
+            frequency=row.frequency,
+            status=row.status,
+            last_event_at=row.last_event_at,
+            created_at=row.created_at,
+        )
+
+    @staticmethod
+    def list_all_active(session: Session) -> list[tuple[MonitorRecord, str, date | None]]:
+        """Every active monitor project-wide, with its project's own `project_id`/
+        `release_date` — PHASE_07.md §7.3's coil-tightening job runs once daily across
+        every project, not one at a time, so it needs `frequency_for(days_to_release)`
+        computed per-monitor without a separate per-project round trip."""
+        rows = session.execute(
+            select(MonitorRow, ClaimRow.project_id, ProjectRow.release_date)
+            .join(ClaimRow, ClaimRow.claim_id == MonitorRow.claim_id)
+            .join(ProjectRow, ProjectRow.project_id == ClaimRow.project_id)
+            .where(MonitorRow.status == "active")
+        ).all()
+        return [
+            (
+                MonitorRecord(
+                    monitor_id=r.monitor_id,
+                    claim_id=r.claim_id,
+                    type=r.type,
+                    task_run_id=r.task_run_id,
+                    query=r.query,
+                    frequency=r.frequency,
+                    status=r.status,
+                    last_event_at=r.last_event_at,
+                    created_at=r.created_at,
+                ),
+                project_id,
+                release_date,
+            )
+            for r, project_id, release_date in rows
         ]
 
 

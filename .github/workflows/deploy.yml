@@ -115,7 +115,30 @@ jobs:
             --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},TOOLBOX_BACKEND_URL=${TOOLBOX_URL}" \
             --allow-unauthenticated
 
-      # TODO (Phase 3.3+): webhook_receiver, reverify_worker as they get real code.
+      - name: Build + deploy webhook-receiver
+        run: |
+          gcloud builds submit --config=services/webhook_receiver/cloudbuild.yaml .
+          gcloud run deploy webhook-receiver --region="$OUROBOROS_REGION" \
+            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/webhook-receiver:latest" \
+            --service-account="sa-webhook@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" \
+            --allow-unauthenticated
+          # Public ingress (PHASE_07.md §7.1): Parallel's own webhook delivery calls
+          # this URL directly over the internet, with no GCP identity of its own to
+          # authenticate as — signature verification (packages/parallel_client/
+          # webhooks.py) is the real access control here, matching how a public
+          # webhook endpoint is normally secured.
+
+      - name: Build + deploy reverify-worker
+        run: |
+          gcloud builds submit --config=services/reverify_worker/cloudbuild.yaml .
+          gcloud run deploy reverify-worker --region="$OUROBOROS_REGION" \
+            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/reverify-worker:latest" \
+            --service-account="sa-reverify@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app" \
+            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
+            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
+            --vpc-egress=private-ranges-only
 
   terraform-apply:
     runs-on: ubuntu-latest

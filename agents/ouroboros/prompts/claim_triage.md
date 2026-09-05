@@ -13,8 +13,8 @@ which priority rubric and which batch a claim goes into. Never guess `kind` from
 
 A specialist only ever sees the batches *you* output this turn — a claim already sat
 at `triaged` status from an earlier run (e.g. one that hit a length/time limit before
-its specialists ran) has no other way back into a batch, so step 6 below sweeps those
-back in too, not just the ones you just triaged in steps 1-5.
+its specialists ran) has no other way back into a batch, so step 7 below sweeps those
+back in too, not just the ones you just triaged in steps 1-6.
 
 ## Context
 - Project: `{{project_id}}`, asset: `{{asset_id}}`, studio: `{{studio_id}}`.
@@ -48,7 +48,18 @@ back in too, not just the ones you just triaged in steps 1-5.
         **2**.
      4. Anything else (e.g. `channel` missing/null and none of the above matched) →
         **2**, rather than guessing a channel.
-4. The prior-decision skip rule applies to `kind=legal` claims only — `prior_decisions`
+4. For each *distinct* entity (across both `kind=legal` and `kind=factual` claims, once
+   per entity after the merge in step 2 — same "once per entity, not once per claim"
+   rule as step 5's prior-decision lookups), call `memory_retrieve(query=<entity_text>,
+   scope_key={{studio_id}}, limit=3)` — a studio-scoped check for whether this entity
+   came up in a *prior production* (PHASE_07.md §7.5). If `hits` is non-empty, call
+   `note_prior_production_hit(claim_id, note="Seen in previous production: <a ≤20-word
+   summary of the top hit's input_excerpt>")` for every claim sharing that entity. This
+   is informational only — a Memory hit is not a clearance decision, so it never
+   changes priority, batch assignment, or the skip rule below. If `hits` is empty
+   (including when Memory is unavailable/disabled — the tool never raises), skip
+   silently, no note.
+5. The prior-decision skip rule applies to `kind=legal` claims only — `prior_decisions`
    holds rights-clearance decisions, and a factual claim's accuracy isn't a clearance
    that ages the same way, so no `kind=factual` claim is ever skipped here (ADK_AGENTS.md
    §3.3 gives TRUE CUT no skip rule of its own). For each *distinct* legal-claim entity
@@ -61,19 +72,19 @@ back in too, not just the ones you just triaged in steps 1-5.
    months old, mark every claim sharing that entity skipped: call
    `set_status(claim_id, "triaged", actor="agent", note="skipped: prior_decision",
    ref={"skip_reason": "prior_decision"})`.
-5. For every claim not skipped, call `set_status(claim_id, "triaged", actor="agent",
+6. For every claim not skipped, call `set_status(claim_id, "triaged", actor="agent",
    note="triaged by ClaimTriage", ref={})`.
-6. Call `list_claims` again for `project_id={{project_id}}`, `status="triaged"` — this
+7. Call `list_claims` again for `project_id={{project_id}}`, `status="triaged"` — this
    picks up any claim already at `triaged` from an earlier run whose specialists never
-   got to run on it (see the note in Role above). Add every one of these to steps 5's
+   got to run on it (see the note in Role above). Add every one of these to step 6's
    non-skipped claims, *except* any `claim_id` already in your own `skipped` list from
-   step 4 this turn — a claim you just skipped is correctly `triaged` and must stay out
+   step 5 this turn — a claim you just skipped is correctly `triaged` and must stay out
    of every batch. (A claim skipped in a *previous* run, before this list_claims call,
    is indistinguishable from one that genuinely needs a specialist — `list_claims`
    doesn't expose *why* a claim is `triaged`. Sending it through a specialist again is
    wasteful, not wrong: the specialist will just reconfirm the existing clearance.)
-7. Group the combined set of claims (freshly triaged in steps 1-5, plus swept up in
-   step 6) into batches by category. `kind=legal` claims: `music`, `brand`, `person`,
+8. Group the combined set of claims (freshly triaged in steps 1-6, plus swept up in
+   step 7) into batches by category. `kind=legal` claims: `music`, `brand`, `person`,
    `location_artwork` (both `location` and `artwork` categories go into this one batch).
    `kind=factual` claims: `fact` (categories `event`, `statistic`, `attribution` —  one
    shared batch, there is only one FactAgent) and `archival` (categories `archival`,
@@ -117,11 +128,11 @@ could have, and 12 months is the cutoff regardless of the underlying reason.
 
 **Factual claim**: A `kind=factual`, category `statistic` claim ("bananas ripen in 4-6
 days at this stage") with `channel="narration"` → priority 1 (statistic in narration),
-goes into the `fact` batch; no prior-decision check at all, since step 4 only applies to
-`kind=legal` claims.
+goes into the `fact` batch; no prior-decision check at all, since step 5 only applies to
+`kind=legal` claims (the step 4 Memory check still runs for it, same as any other entity).
 
 **Resuming a partial run**: `list_claims(status="pending")` in step 1 returns nothing
-(every claim in the project already got past triage in an earlier run) — steps 2-5 do
-nothing. Step 6's `list_claims(status="triaged")` returns 50 claims left over from that
+(every claim in the project already got past triage in an earlier run) — steps 2-6 do
+nothing. Step 7's `list_claims(status="triaged")` returns 50 claims left over from that
 earlier run. None of them are in this turn's `skipped` list (it's empty), so all 50 go
-into their category batches in step 7, exactly as if you'd just triaged them yourself.
+into their category batches in step 8, exactly as if you'd just triaged them yourself.

@@ -113,3 +113,79 @@ resource "google_pubsub_subscription_iam_member" "pubsub_agent_subscribes_autoru
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
+
+# Phase 7.1/7.2 (PHASE_07.md §7.1, ARCHITECTURE.md §2.5): webhook_receiver verifies a
+# Parallel Monitor/Task webhook's signature, then publishes here; reverify_worker is the
+# one real subscriber. Mirrors claims_extracted/claims_extracted_dlq's shape exactly.
+resource "google_pubsub_topic" "verification_events" {
+  project = var.project_id
+  name    = "verification.events"
+}
+
+resource "google_pubsub_topic" "verification_events_dlq" {
+  project = var.project_id
+  name    = "verification.events.dlq"
+}
+
+# reverify-worker is gcloud-deployed in deploy.yml's deploy-services job, which always
+# runs before terraform-apply (same ordering constraint as dashboard_api above) — so by
+# the time this data source is read, the service (and its real URL, needed for the push
+# subscription below) already exists.
+data "google_cloud_run_v2_service" "reverify_worker" {
+  project  = var.project_id
+  location = var.region
+  name     = var.reverify_worker_service_name
+}
+
+resource "google_pubsub_subscription" "verification_events_reverify" {
+  project = var.project_id
+  name    = "verification-events-reverify"
+  topic   = google_pubsub_topic.verification_events.id
+
+  ack_deadline_seconds = 20
+
+  push_config {
+    push_endpoint = "${data.google_cloud_run_v2_service.reverify_worker.uri}/pubsub/verification"
+    oidc_token {
+      service_account_email = var.sa_scheduler_email
+      audience              = data.google_cloud_run_v2_service.reverify_worker.uri
+    }
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.verification_events_dlq.id
+    max_delivery_attempts = 5
+  }
+}
+
+# So a dead-lettered verification event isn't just unreachable — mirrors
+# claims_extracted_dlq_pull's rationale exactly.
+resource "google_pubsub_subscription" "verification_events_dlq_pull" {
+  project = var.project_id
+  name    = "verification-events-dlq-pull"
+  topic   = google_pubsub_topic.verification_events_dlq.id
+
+  message_retention_duration = "604800s" # 7 days
+}
+
+resource "google_cloud_run_v2_service_iam_member" "reverify_worker_invoker_pubsub" {
+  project  = var.project_id
+  location = var.region
+  name     = var.reverify_worker_service_name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.sa_scheduler_email}"
+}
+
+resource "google_pubsub_topic_iam_member" "pubsub_agent_publishes_verification_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.verification_events_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_project_service_identity.pubsub.email}"
+}
+
+resource "google_pubsub_subscription_iam_member" "pubsub_agent_subscribes_verification_reverify" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.verification_events_reverify.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${google_project_service_identity.pubsub.email}"
+}

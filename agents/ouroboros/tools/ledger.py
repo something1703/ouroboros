@@ -14,8 +14,9 @@ via `vars()`) — none of which survive `deepcopy` (`TypeError: cannot pickle
 treats functions as atomic and returns them unchanged, so wrapping every tool call in one
 sidesteps the problem entirely instead of trying to make the SDK's own object copyable.
 
-`ledger_write`'s tools (`record_evidence`, `set_status`, `record_risk`, `record_monitor`)
-are never handed to Parallel — only `parallel_readonly` (Phase 5.6) is exposed externally.
+`ledger_write`'s tools (`record_evidence`, `set_status`, `note_prior_production_hit`,
+`record_risk`, `record_monitor`) are never handed to Parallel — only `parallel_readonly`
+(Phase 5.6) is exposed externally.
 
 Toolbox tools are loaded lazily (behind `_tools()`, cached on first real call) rather than
 at import time: this module is transitively imported by pure-logic code (e.g.
@@ -135,6 +136,14 @@ def set_status(
             event_id=event_id,
         )
     )
+
+
+def note_prior_production_hit(claim_id: str, note: str) -> str:
+    """Studio memory (PHASE_07.md §7.5): record that a Parallel Memory lookup for this
+    claim's entity found a hit from a prior production, so the claim view can surface
+    "Seen in previous production." Call only when `memory_retrieve` actually returned
+    ≥1 hit for this claim's entity."""
+    return str(_tools()["note_prior_production_hit"](claim_id=claim_id, note=note))
 
 
 def record_risk(

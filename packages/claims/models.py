@@ -124,6 +124,7 @@ class Claim(BaseModel):
     jurisdictions: list[str]  # ISO alpha-2 codes; from project.distribution_territories
     priority: int = Field(ge=1, le=5, default=3)  # 1 (highest) - 5; set by ClaimTriage
     status: VerificationStatus = VerificationStatus.PENDING
+    prior_production_note: str | None = None  # set by ClaimTriage on a Parallel Memory hit
     created_at: datetime
     updated_at: datetime
 

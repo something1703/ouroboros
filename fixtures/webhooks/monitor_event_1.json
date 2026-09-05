@@ -1,0 +1,16 @@
+{
+  "type": "monitor.event.detected",
+  "timestamp": "2026-09-05T00:00:00Z",
+  "data": {
+    "monitor_id": "monitor_4de84c9330364693a46348c619ecea62",
+    "event": {
+      "event_group_id": "replay-fixture-event-group-1"
+    },
+    "metadata": {
+      "claim_id": "effbe6edcac98c252a3dec71",
+      "project_id": "demo",
+      "monitor_kind": "snapshot",
+      "env": "dev"
+    }
+  }
+}

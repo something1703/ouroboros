@@ -70,6 +70,20 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 		--service-account=sa-toolbox-public@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
 		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),TOOLBOX_BACKEND_URL=$(TOOLBOX_URL) \
 		--allow-unauthenticated
+	gcloud builds submit --config=services/webhook_receiver/cloudbuild.yaml .
+	gcloud run deploy webhook-receiver --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/webhook-receiver:latest \
+		--service-account=sa-webhook@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
+		--allow-unauthenticated
+	gcloud builds submit --config=services/reverify_worker/cloudbuild.yaml .
+	gcloud run deploy reverify-worker --region=$(OUROBOROS_REGION) \
+		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/reverify-worker:latest \
+		--service-account=sa-reverify@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app \
+		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
+		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
+		--vpc-egress=private-ranges-only
 
 deploy-infra: ## usage: make deploy-infra ENV=dev
 	terraform -chdir=infra init
@@ -84,7 +98,7 @@ seed: ## loads fixtures/projects/demo.yaml — idempotent, safe to re-run
 	DB_HOST=localhost DB_NAME=ouroboros DB_USER=app DB_PASSWORD=localdev uv run python scripts/seed.py
 
 replay-webhook: ## Phase 7.1 — usage: make replay-webhook FIXTURE=monitor_event_1
-	@echo "TODO (Phase 7.1): uv run python scripts/replay_webhook.py --fixture $(FIXTURE)"
+	uv run --env-file .env python scripts/replay_webhook.py --fixture $(FIXTURE)
 
 evals: ## Phase 9.2
 	@echo "TODO (Phase 9.2): uv run python evals/run_golden.py && uv run python evals/run_vertex.py"

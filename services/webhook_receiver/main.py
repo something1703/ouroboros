@@ -41,8 +41,8 @@ _DEDUPE_COLLECTION = "webhook_dedupe"
 _DEDUPE_TTL = timedelta(days=7)
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "webhook_receiver"}
 
 

@@ -17,8 +17,8 @@ from packages.common.secrets import get_secret
 app = FastAPI()
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "_hello"}
 
 

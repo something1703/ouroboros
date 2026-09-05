@@ -59,8 +59,8 @@ def _check_rate_limit() -> None:
     _recent_calls.append(now)
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "toolbox_public"}
 
 

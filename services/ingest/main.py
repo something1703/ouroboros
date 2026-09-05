@@ -41,8 +41,8 @@ _CUT_RE = re.compile(r"^cuts/(?P<project_id>[^/]+)/[^/]+\.(?:mp4|mov)$")
 CLAIMS_EXTRACTED_TOPIC = "claims.extracted"
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "ingest"}
 
 

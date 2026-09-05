@@ -42,7 +42,7 @@ from packages.ledger.repositories import (
 from packages.parallel_client.monitor import trigger as monitor_trigger
 from packages.parallel_client.monitor import update as monitor_update
 
-from .auth import UserContext, get_current_user
+from .auth import UserContext, get_current_user, require_internal_caller
 from .runs import start_run
 
 configure_tracing(service="dashboard_api")
@@ -168,8 +168,8 @@ def _conflict_handler(_request: Request, exc: Conflict) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "dashboard_api"}
 
 
@@ -476,13 +476,17 @@ async def create_run(project_id: str, body: StartRunRequest) -> StartRunResponse
     return StartRunResponse(run_id=run_id)
 
 
-@app.post("/internal/runs/auto")
+@app.post("/internal/runs/auto", dependencies=[Depends(require_internal_caller)])
 async def auto_run(request: Request) -> dict[str, object]:
     """Pub/Sub push target on `claims.extracted` (infra/modules/pubsub — the
     subscription itself is added alongside this endpoint). Starts a CLEAR run
     automatically after ingest, only when `AUTO_RUN_AFTER_INGEST=true`; otherwise a
     no-op 200 (never a Pub/Sub-retry-triggering error) so the feature can be toggled
-    without touching the subscription."""
+    without touching the subscription.
+
+    Protected by `require_internal_caller`, not Cloud Run IAM (docs/DECISIONS.md):
+    the whole service is now `--allow-unauthenticated` so real users' GIS tokens can
+    reach `get_current_user` at all."""
     if os.environ.get("AUTO_RUN_AFTER_INGEST", "").lower() != "true":
         return {"skipped": True, "reason": "AUTO_RUN_AFTER_INGEST not enabled"}
 
@@ -500,7 +504,7 @@ async def auto_run(request: Request) -> dict[str, object]:
     return {"run_id": run_id}
 
 
-@app.post("/internal/jobs/tighten")
+@app.post("/internal/jobs/tighten", dependencies=[Depends(require_internal_caller)])
 def tighten_monitors() -> dict[str, object]:
     """Cloud Scheduler daily target (PHASE_07.md §7.3): tightens every active Monitor's
     frequency as its project's release date approaches, and reconciles every Monitor's
@@ -509,9 +513,9 @@ def tighten_monitors() -> dict[str, object]:
     #095), and cheap to keep doing unconditionally afterward since neither Parallel nor
     this ledger charges anything extra for an unchanged `monitor.update()` call.
 
-    No in-app auth check: Cloud Run's own IAM (`--no-allow-unauthenticated` +
-    `roles/run.invoker` granted to `sa-scheduler`) is what actually gates this, the same
-    pattern `/internal/runs/auto` already uses."""
+    Protected by `require_internal_caller`, not Cloud Run IAM (docs/DECISIONS.md):
+    the whole service is now `--allow-unauthenticated` so real users' GIS tokens can
+    reach `get_current_user` at all."""
     webhook_base_url = os.environ.get("PUBLIC_BASE_URL", "")
     webhook_url = f"{webhook_base_url}/webhooks/parallel/monitor" if webhook_base_url else None
 
@@ -551,7 +555,9 @@ def tighten_monitors() -> dict[str, object]:
     return {"total": len(monitors), "updated": updated, "unchanged": unchanged, "errors": errors}
 
 
-@app.post("/internal/jobs/trigger-monitor/{monitor_id}")
+@app.post(
+    "/internal/jobs/trigger-monitor/{monitor_id}", dependencies=[Depends(require_internal_caller)]
+)
 def trigger_monitor(monitor_id: str) -> dict[str, object]:
     """PHASE_07.md §7.6: forces an off-schedule Monitor run for the demo, instead of
     waiting for its own schedule (up to 1w for a freshly-created snapshot Monitor) to
@@ -560,8 +566,7 @@ def trigger_monitor(monitor_id: str) -> dict[str, object]:
     fires if the triggered run detects an actual material change — so `triggered=True`
     here does not guarantee an event lands; it only guarantees the check ran.
 
-    No in-app auth check, matching `/internal/jobs/tighten`: Cloud Run's own IAM
-    (`--no-allow-unauthenticated`) is what actually gates this."""
+    Protected by `require_internal_caller`, matching `/internal/jobs/tighten`."""
     with session_scope() as session:
         monitor = MonitorRepo.get(session, monitor_id)
     if monitor is None:

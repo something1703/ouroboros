@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!--
+    Ouroboros mark (docs/DECISIONS.md): a single serpent coiled into a ring, head
+    reaching back to close the loop. Original geometry, a thick stroked circle with
+    a dash-gap, not a trace of any reference image, chosen specifically because it
+    stays legible down to a 16px favicon, unlike a detailed illustration would.
+  -->
+  <circle cx="100" cy="100" r="72" fill="none" stroke="#FB631B" stroke-width="30"
+    stroke-linecap="round" stroke-dasharray="412.3 40"
+    transform="rotate(-76.5 100 100)" />
+  <circle cx="117.7" cy="26.1" r="20" fill="#FB631B" />
+  <path d="M 108 34 L 100 27 L 112 20 Z" fill="#FB631B" />
+  <circle cx="123" cy="20" r="3.4" fill="#15120F" />
+</svg>

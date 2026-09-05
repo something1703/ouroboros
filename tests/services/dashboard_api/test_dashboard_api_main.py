@@ -17,7 +17,7 @@ import services.dashboard_api.main as dashboard_api
 from packages.claims.enums import ClaimCategory, ClaimKind, Confidence
 from packages.claims.models import Claim, Evidence, Project, Risk, RiskLevel, SourceRef
 from packages.ledger.repositories import ClaimRepo, EvidenceRepo, ProjectRepo, RiskRepo
-from services.dashboard_api.auth import UserContext, get_current_user
+from services.dashboard_api.auth import UserContext, get_current_user, require_internal_caller
 
 pytestmark = pytest.mark.usefixtures("engine")
 
@@ -50,10 +50,15 @@ def _as(email: str, role: str) -> None:
     )
 
 
+def _as_internal_caller() -> None:
+    dashboard_api.app.dependency_overrides[require_internal_caller] = lambda: None
+
+
 @pytest.fixture(autouse=True)
 def _clear_auth_override() -> Iterator[None]:
     yield
     dashboard_api.app.dependency_overrides.pop(get_current_user, None)
+    dashboard_api.app.dependency_overrides.pop(require_internal_caller, None)
 
 
 @pytest.fixture
@@ -92,8 +97,8 @@ def _seed_claim(db_session: Session, project_id: str = "demo") -> Claim:
     return claim
 
 
-def test_healthz(client: TestClient) -> None:
-    response = client.get("/healthz")
+def test_status(client: TestClient) -> None:
+    response = client.get("/status")
     assert response.status_code == 200
     assert response.json() == {"ok": True, "service": "dashboard_api"}
 
@@ -318,3 +323,15 @@ def test_metrics(client: TestClient, db_session: Session) -> None:
     body = response.json()
     assert body["counts_by_status"] == {}
     assert body["current_cadence"] in {"1h", "1d", "1w"}
+
+
+def test_internal_endpoint_requires_authorization_header(client: TestClient) -> None:
+    response = client.post("/internal/jobs/tighten")
+    assert response.status_code == 422  # missing Authorization header entirely
+
+
+def test_internal_endpoint_works_for_an_authorized_internal_caller(client: TestClient) -> None:
+    _as_internal_caller()
+    response = client.post("/internal/jobs/tighten")
+    assert response.status_code == 200
+    assert response.json() == {"total": 0, "updated": 0, "unchanged": 0, "errors": []}

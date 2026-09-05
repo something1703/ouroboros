@@ -35,6 +35,10 @@ INTAKE_BUCKET ?= ouroboros-507503-intake-dev
 ARTIFACTS_BUCKET ?= ouroboros-507503-artifacts-dev
 # Phase 8.1/8.6 GIS sign-in Client ID -- empty until created via the Cloud Console (docs/BLOCKERS.md)
 GOOGLE_OAUTH_CLIENT_ID ?=
+# dashboard-api's own URL -- Cloud Run's project-number URL form is deterministic
+# (doesn't require the service to already exist to compute), used as the expected
+# `audience` for /internal/* routes' own identity-token check (docs/DECISIONS.md).
+SELF_BASE_URL ?= https://dashboard-api-492372502792.us-central1.run.app
 
 deploy: deploy-services deploy-infra deploy-agent-engine ## usage: make deploy ENV=dev -- mirrors .github/workflows/deploy.yml's three jobs, in the same order (services before infra: an Eventarc trigger's destination and any run.invoker binding on a service both need that service to already exist)
 
@@ -60,9 +64,9 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 	gcloud run deploy dashboard-api --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/dashboard-api:latest \
 		--service-account=sa-dashboard-api@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
-		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST),GOOGLE_OAUTH_CLIENT_ID=$(GOOGLE_OAUTH_CLIENT_ID) \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST),GOOGLE_OAUTH_CLIENT_ID=$(GOOGLE_OAUTH_CLIENT_ID),SELF_BASE_URL=$(SELF_BASE_URL) \
 		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
-		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
+		--allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --memory=1Gi \
 		--no-cpu-throttling --min-instances=1
 	gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .

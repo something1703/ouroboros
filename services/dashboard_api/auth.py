@@ -71,3 +71,47 @@ def require_role(*allowed: Role) -> Callable[[UserContext], UserContext]:
         return user
 
     return _check
+
+
+# The only real callers of `/internal/*` today (Terraform-verified): the
+# `claims-extracted-autorun` Pub/Sub push subscription and the `tighten-monitors`
+# Cloud Scheduler job both authenticate as `sa_scheduler_email`. `sa-ingest` is kept
+# too since it already held `roles/run.invoker` on this service before this change.
+_INTERNAL_CALLERS = frozenset(
+    {
+        "sa-scheduler@ouroboros-507503.iam.gserviceaccount.com",
+        "sa-ingest@ouroboros-507503.iam.gserviceaccount.com",
+    }
+)
+
+
+def require_internal_caller(authorization: str = Header(...)) -> None:
+    """Replaces Cloud Run's own IAM check for `/internal/*` routes. Making the whole
+    service `--allow-unauthenticated` (needed so real users' GIS tokens ever reach
+    `get_current_user` at all -- Cloud Run's IAM check would otherwise reject them
+    before the app sees the request, since a GIS token and a Cloud Run invoker
+    identity token are different things entirely) means these routes need their own
+    protection instead of relying on the ingress layer. Verifies a real Google-signed
+    identity token -- the same kind `sa-scheduler`/`sa-ingest` already mint via
+    `google.oauth2.id_token.fetch_id_token(audience=<this service's own URL>)` for
+    every one of these calls today -- with `audience=SELF_BASE_URL` (this service's
+    own URL, distinct from `GOOGLE_OAUTH_CLIENT_ID`, so a GIS sign-in token can never
+    satisfy this check even by accident)."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "expected 'Authorization: Bearer <id_token>'")
+    token = authorization.removeprefix("Bearer ")
+
+    self_url = os.environ.get("SELF_BASE_URL")
+    if not self_url:
+        raise HTTPException(500, "SELF_BASE_URL not configured")
+
+    try:
+        claims = id_token.verify_oauth2_token(  # type: ignore[no-untyped-call]
+            token, gauth_requests.Request(), audience=self_url
+        )
+    except (ValueError, GoogleAuthError) as exc:
+        raise HTTPException(401, f"invalid identity token: {exc}") from exc
+
+    email = claims.get("email")
+    if email not in _INTERNAL_CALLERS:
+        raise HTTPException(403, f"{email} is not an authorized internal caller")

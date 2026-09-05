@@ -93,8 +93,8 @@ _HEADLINE_FIELDS = (
 )
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, object]:
+@app.get("/status")
+def status() -> dict[str, object]:
     return {"ok": True, "service": "reverify_worker"}
 
 

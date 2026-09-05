@@ -106,6 +106,19 @@ def cancel(monitor_id: str) -> None:
     call(_call, api="monitor_cancel", sku="monitor.cancel")
 
 
+def trigger(monitor_id: str) -> None:
+    """Enqueues an immediate, off-schedule run of an existing Monitor (PHASE_07.md §7.6).
+    Per Parallel's own docstring, this only emits a `monitor.event.detected` webhook if
+    the triggered run actually detects a material change -- a no-op call is a normal,
+    silent outcome, not a bug."""
+
+    def _call() -> object:
+        get_client().monitor.trigger(monitor_id)
+        return None
+
+    call(_call, api="monitor_trigger", sku="monitor.trigger")
+
+
 def events(monitor_id: str, *, event_group_id: str | None = None) -> list[MonitorEvent]:
     def _call() -> object:
         return get_client().monitor.events(monitor_id, event_group_id=event_group_id)

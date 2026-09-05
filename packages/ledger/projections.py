@@ -124,6 +124,8 @@ class Projector:
         counts_by_risk: dict[str, int],
         reality_drift: float,
         spend_usd: Decimal,
+        drift_7d: float | None = None,
+        last_change_at: datetime | None = None,
     ) -> None:
         doc_ref = self._client.collection("projects").document(project_id)
         data: dict[str, object] = {
@@ -135,6 +137,14 @@ class Projector:
             "spend_usd": float(spend_usd),
             "updated_at": firestore.SERVER_TIMESTAMP,
         }
+        # Optional (DATA_MODEL.md §6): every caller before Phase 7.2 only ever computed
+        # a bare `reality_drift` (hardcoded 0.0, no cycle-to-cycle history existed yet
+        # to derive a 7-day window or a last-change timestamp from) — reverify_worker is
+        # the first caller with real `DriftResult` data to report.
+        if drift_7d is not None:
+            data["drift_7d"] = drift_7d
+        if last_change_at is not None:
+            data["last_change_at"] = last_change_at
         doc_ref.set(data, merge=True)
 
     def event_entry(
@@ -146,7 +156,7 @@ class Projector:
         claim_id: str,
         kind: EventKind,
         summary: str,
-        delta: dict[str, object] | None = None,
+        delta: dict[str, dict[str, object]] | None = None,
     ) -> None:
         doc_ref = (
             self._client.collection("projects")

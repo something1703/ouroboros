@@ -22,13 +22,23 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from config.parallel import days_to_release, frequency_for
 from packages.claims.enums import ClaimCategory, VerificationStatus
 from packages.claims.models import Asset, Claim, Segment
 from packages.common.errors import NotFound
 from packages.common.logging import get_logger
 from packages.common.tracing import configure_tracing, instrument_fastapi
 from packages.ledger.db import session_scope
-from packages.ledger.repositories import AssetRepo, ClaimRepo, EvidenceRepo, ProjectRepo, RiskRepo
+from packages.ledger.repositories import (
+    AssetRepo,
+    ClaimRepo,
+    EvidenceRepo,
+    MonitorRepo,
+    ProjectRepo,
+    RiskRepo,
+)
+from packages.parallel_client.monitor import trigger as monitor_trigger
+from packages.parallel_client.monitor import update as monitor_update
 
 from .runs import start_run
 
@@ -244,6 +254,82 @@ async def auto_run(request: Request) -> dict[str, object]:
     run_id = start_run(project_id, asset_id, mode="clear")
     log.info("auto_run_started", project_id=project_id, asset_id=asset_id, run_id=run_id)
     return {"run_id": run_id}
+
+
+@app.post("/internal/jobs/tighten")
+def tighten_monitors() -> dict[str, object]:
+    """Cloud Scheduler daily target (PHASE_07.md §7.3): tightens every active Monitor's
+    frequency as its project's release date approaches, and reconciles every Monitor's
+    webhook URL to the real `webhook-receiver` service (PUBLIC_BASE_URL) — needed once,
+    for real, for every Monitor created before that service existed (docs/DECISIONS.md
+    #095), and cheap to keep doing unconditionally afterward since neither Parallel nor
+    this ledger charges anything extra for an unchanged `monitor.update()` call.
+
+    No in-app auth check: Cloud Run's own IAM (`--no-allow-unauthenticated` +
+    `roles/run.invoker` granted to `sa-scheduler`) is what actually gates this, the same
+    pattern `/internal/runs/auto` already uses."""
+    webhook_base_url = os.environ.get("PUBLIC_BASE_URL", "")
+    webhook_url = f"{webhook_base_url}/webhooks/parallel/monitor" if webhook_base_url else None
+
+    with session_scope() as session:
+        monitors = MonitorRepo.list_all_active(session)
+
+    updated = 0
+    unchanged = 0
+    errors: list[dict[str, str]] = []
+    for monitor, project_id, release_date in monitors:
+        target_frequency = frequency_for(days_to_release(release_date))
+        try:
+            monitor_update(monitor.monitor_id, frequency=target_frequency, webhook_url=webhook_url)
+        except Exception as exc:
+            log.warning(
+                "tighten_monitor_update_failed", monitor_id=monitor.monitor_id, error=str(exc)
+            )
+            errors.append({"monitor_id": monitor.monitor_id, "error": str(exc)})
+            continue
+
+        if target_frequency != monitor.frequency:
+            with session_scope() as session:
+                MonitorRepo.upsert(
+                    session, monitor.model_copy(update={"frequency": target_frequency})
+                )
+            updated += 1
+            log.info(
+                "tighten_frequency_changed",
+                monitor_id=monitor.monitor_id,
+                project_id=project_id,
+                old=monitor.frequency,
+                new=target_frequency,
+            )
+        else:
+            unchanged += 1
+
+    return {"total": len(monitors), "updated": updated, "unchanged": unchanged, "errors": errors}
+
+
+@app.post("/internal/jobs/trigger-monitor/{monitor_id}")
+def trigger_monitor(monitor_id: str) -> dict[str, object]:
+    """PHASE_07.md §7.6: forces an off-schedule Monitor run for the demo, instead of
+    waiting for its own schedule (up to 1w for a freshly-created snapshot Monitor) to
+    produce a real, organically-Parallel-issued webhook event. Per Parallel's own
+    `monitor.trigger()` docs (see `packages/parallel_client/monitor.py`), a webhook only
+    fires if the triggered run detects an actual material change — so `triggered=True`
+    here does not guarantee an event lands; it only guarantees the check ran.
+
+    No in-app auth check, matching `/internal/jobs/tighten`: Cloud Run's own IAM
+    (`--no-allow-unauthenticated`) is what actually gates this."""
+    with session_scope() as session:
+        monitor = MonitorRepo.get(session, monitor_id)
+    if monitor is None:
+        raise NotFound("monitor", monitor_id)
+    if monitor.status != "active":
+        raise HTTPException(
+            status_code=409, detail=f"monitor {monitor_id} is {monitor.status}, not active"
+        )
+
+    monitor_trigger(monitor_id)
+    log.info("monitor_triggered", monitor_id=monitor_id, claim_id=monitor.claim_id)
+    return {"triggered": True, "monitor_id": monitor_id, "claim_id": monitor.claim_id}
 
 
 def _object_name(project_id: str, *, kind: Literal["script", "cut"], filename: str) -> str:

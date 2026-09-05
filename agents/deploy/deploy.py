@@ -147,7 +147,12 @@ def main() -> None:
     env_vars = {name: os.environ[name] for name in _PASSTHROUGH_ENV_VARS if os.environ.get(name)}
     env_vars["DB_HOST"] = _PROD_DB_HOST
     env_vars["TOOLBOX_MCP_URL"] = _run_url("toolbox", region=region)
-    env_vars["PUBLIC_BASE_URL"] = _run_url("dashboard-api", region=region)
+    # Phase 7.1: Monitor webhooks (Reporter's own creation calls) need to reach
+    # `webhook-receiver`, the service that actually has a `/webhooks/parallel/*` route
+    # -- found live (docs/DECISIONS.md #095) that every Monitor created before this
+    # service existed pointed at dashboard-api instead, which 404s; the coil-tightening
+    # job (PHASE_07.md §7.3) reconciles those older Monitors' webhook URLs separately.
+    env_vars["PUBLIC_BASE_URL"] = _run_url("webhook-receiver", region=region)
     # NOT setting GOOGLE_CLOUD_PROJECT here (docs/DECISIONS.md #069) -- found live,
     # Vertex AI rejects it outright: "Environment variable name 'GOOGLE_CLOUD_PROJECT'
     # is reserved." The platform already injects it for every deployed agent; a

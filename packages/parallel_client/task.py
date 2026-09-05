@@ -107,6 +107,27 @@ def run(
     if not wait:
         return RunHandle(run_id=run_id)
 
+    return fetch_result(
+        run_id, spec=spec, processor=processor, claim_id=claim_id, timeout_s=timeout_s
+    )
+
+
+def fetch_result(
+    run_id: str,
+    *,
+    spec: str,
+    processor: str = TASK_PROCESSOR_DEFAULT,
+    claim_id: str | None = None,
+    timeout_s: int = TASK_DEFAULT_TIMEOUT_S,
+) -> TaskResult:
+    """Fetch and parse a Task run's result given just its `run_id` — the path a
+    `wait=False` caller (PHASE_07.md §7.2's re-verification chain) takes once the
+    matching `task_run.status` webhook says the run finished. `spec` must be the same
+    spec name the run was created with (needed to know its required output fields for
+    confidence scoring; the API itself doesn't echo it back)."""
+    spec_json = SPECS[spec]
+    sku = f"task.{processor}"
+
     def _result() -> object:
         return get_client().task_run.result(run_id, api_timeout=timeout_s)
 

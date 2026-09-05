@@ -33,4 +33,11 @@ Format per entry:
 **Status:** open (informational — does not block product work, only affects how *this agent* verifies deployed HTTP endpoints)
 
 ---
+## [PHASE 7.1] Parallel webhook signing secret is dashboard-only, no API access            (opened: 2026-09-05 13:20 IST)
+**Tried:** Fetched `docs.parallel.ai/resources/webhook-setup.md` to find how to retrieve the webhook signing secret `packages/parallel_client/webhooks.py::verify_signature` needs. The docs are explicit: "Go to Settings → Webhooks to view your account webhook secret" — it's a single, account-level secret (format `whsec_...`), shown only in the Parallel account dashboard, never returned by any API call (not from Monitor/Task creation, not from any endpoint I can reach with `PARALLEL_API_KEY`).
+**Error / gap:** No programmatic path exists to read this value — it requires an interactive login to platform.parallel.ai, the same category of "needs a human at the dashboard" gap as the earlier balance-check blocker (§1.8).
+**Need from human:** Log into platform.parallel.ai → Settings → Webhooks, copy the account webhook secret, and either (a) set it directly in Secret Manager (`gcloud secrets versions add PARALLEL_WEBHOOK_SECRET --data-file=-`) or (b) paste it here so it can be set for you. Until then, `services/webhook_receiver` has a **placeholder** secret set (see `docs/DECISIONS.md` #094) so the rest of the loop (Pub/Sub → reverify_worker → risk/drift/Slack) can be verified end-to-end via `make replay-webhook`, but any *real* Parallel-originated webhook will 401 until the real secret is set.
+**Status:** open
+
+---
 All of §A (A1–A6) resolved 2026-09-03: project `ouroboros-507503`, IAM owner confirmed, region `us-central1`, Parallel API key stored in Secret Manager, repo URL supplied, BYOK decided. See `docs/DECISIONS.md` #015.

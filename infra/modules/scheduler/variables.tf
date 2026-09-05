@@ -7,16 +7,11 @@ variable "region" {
 }
 
 variable "sa_scheduler_email" {
-  description = "Identity the push subscription's OIDC token authenticates as when calling dashboard-api."
+  description = "Identity the scheduler job's OIDC token authenticates as when calling dashboard-api."
   type        = string
 }
 
 variable "dashboard_api_service_name" {
   type    = string
   default = "dashboard-api"
-}
-
-variable "reverify_worker_service_name" {
-  type    = string
-  default = "reverify-worker"
 }

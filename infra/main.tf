@@ -114,6 +114,17 @@ module "pubsub" {
   depends_on = [module.project_services, module.iam]
 }
 
+# Needs dashboard-api to already exist (deploy.yml's deploy-services runs before
+# terraform-apply, same ordering constraint as pubsub/eventarc above).
+module "scheduler" {
+  source             = "./modules/scheduler"
+  project_id         = var.project_id
+  region             = var.region
+  sa_scheduler_email = module.iam.service_account_emails["sa-scheduler"]
+
+  depends_on = [module.project_services, module.iam]
+}
+
 # See infra/modules/eventarc/main.tf's header comment: this needs the `ingest` Cloud Run
 # service to already exist, which deploy.yml guarantees by deploying services before
 # running `terraform apply`.

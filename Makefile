@@ -33,6 +33,8 @@ VPC_CONNECTOR ?= ouroboros-dev-conn
 DB_HOST ?= 10.175.0.3
 INTAKE_BUCKET ?= ouroboros-507503-intake-dev
 ARTIFACTS_BUCKET ?= ouroboros-507503-artifacts-dev
+# Phase 8.1/8.6 GIS sign-in Client ID -- empty until created via the Cloud Console (docs/BLOCKERS.md)
+GOOGLE_OAUTH_CLIENT_ID ?=
 
 deploy: deploy-services deploy-infra deploy-agent-engine ## usage: make deploy ENV=dev -- mirrors .github/workflows/deploy.yml's three jobs, in the same order (services before infra: an Eventarc trigger's destination and any run.invoker binding on a service both need that service to already exist)
 
@@ -58,7 +60,7 @@ deploy-services: ## builds + gcloud-deploys every Cloud Run service (see .github
 	gcloud run deploy dashboard-api --region=$(OUROBOROS_REGION) \
 		--image=$(OUROBOROS_REGION)-docker.pkg.dev/$(GOOGLE_CLOUD_PROJECT)/ouroboros/dashboard-api:latest \
 		--service-account=sa-dashboard-api@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com \
-		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST) \
+		--set-env-vars=GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT),OUROBOROS_REGION=$(OUROBOROS_REGION),DB_HOST=$(DB_HOST),DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=$(INTAKE_BUCKET),AGENT_ENGINE_RESOURCE_NAME=$(AGENT_ENGINE_RESOURCE_NAME),AUTO_RUN_AFTER_INGEST=$(AUTO_RUN_AFTER_INGEST),GOOGLE_OAUTH_CLIENT_ID=$(GOOGLE_OAUTH_CLIENT_ID) \
 		--set-secrets=DB_PASSWORD=DB_PASSWORD:latest \
 		--no-allow-unauthenticated --vpc-connector=$(VPC_CONNECTOR) \
 		--vpc-egress=private-ranges-only --memory=1Gi \

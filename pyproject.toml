@@ -33,6 +33,7 @@ dependencies = [
     "pypdf",
     "google-cloud-modelarmor>=0.7.1",
     "openai>=3.7.0",
+    "google-auth",
 ]
 
 [dependency-groups]

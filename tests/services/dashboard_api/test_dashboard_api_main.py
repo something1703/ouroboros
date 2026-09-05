@@ -14,9 +14,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 import services.dashboard_api.main as dashboard_api
-from packages.claims.enums import ClaimCategory, ClaimKind
-from packages.claims.models import Claim, Project, SourceRef
-from packages.ledger.repositories import ClaimRepo, ProjectRepo
+from packages.claims.enums import ClaimCategory, ClaimKind, Confidence
+from packages.claims.models import Claim, Evidence, Project, Risk, RiskLevel, SourceRef
+from packages.ledger.repositories import ClaimRepo, EvidenceRepo, ProjectRepo, RiskRepo
+from services.dashboard_api.auth import UserContext, get_current_user
 
 pytestmark = pytest.mark.usefixtures("engine")
 
@@ -30,6 +31,29 @@ def _stub_signing(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         lambda bucket, name: f"https://storage.googleapis.com/{bucket}/{name}?signed=1",
     )
     yield
+
+
+@pytest.fixture(autouse=True)
+def _stub_projector(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """No real Firestore in the offline test env -- the new endpoints (claim override,
+    events, metrics) all write/read through `_projector`, which every other test in
+    this file never touched (the pre-Phase-8 endpoints don't call it)."""
+    monkeypatch.setattr(dashboard_api._projector, "claim_view", lambda **_kwargs: None)
+    monkeypatch.setattr(dashboard_api._projector, "get_project_summary", lambda _project_id: None)
+    monkeypatch.setattr(dashboard_api._projector, "list_events", lambda _project_id, **_kwargs: [])
+    yield
+
+
+def _as(email: str, role: str) -> None:
+    dashboard_api.app.dependency_overrides[get_current_user] = lambda: UserContext(
+        email=email, role=role
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clear_auth_override() -> Iterator[None]:
+    yield
+    dashboard_api.app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture
@@ -139,3 +163,158 @@ def test_openapi_schema_renders(client: TestClient) -> None:
     schema = response.json()
     assert "/projects/{project_id}/assets" in schema["paths"]
     assert "/projects/{project_id}/claims" in schema["paths"]
+
+
+def test_list_projects_requires_auth(client: TestClient) -> None:
+    assert client.get("/projects").status_code == 422  # missing Authorization header
+
+
+def test_list_and_get_project(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+
+    listed = client.get("/projects")
+    assert listed.status_code == 200
+    assert [p["project_id"] for p in listed.json()] == ["demo"]
+
+    got = client.get("/projects/demo")
+    assert got.status_code == 200
+    assert got.json()["title"] == "Demo Film"
+
+
+def test_create_project(client: TestClient) -> None:
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.post(
+        "/projects",
+        json={"project_id": "new-film", "studio_id": "studio-1", "title": "New Film"},
+    )
+    assert response.status_code == 201
+    assert response.json()["project_id"] == "new-film"
+
+
+def test_create_project_conflict_on_duplicate(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.post(
+        "/projects", json={"project_id": "demo", "studio_id": "studio-1", "title": "Demo Film"}
+    )
+    assert response.status_code == 409
+
+
+def test_get_claim_detail(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get(f"/projects/demo/claims/{claim.claim_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["claim"]["claim_id"] == claim.claim_id
+    assert body["evidence_history"] == []
+    assert body["risk"] is None
+    assert body["history"] == []
+
+
+def test_override_claim_status_as_legal(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)  # kind=legal, category=brand
+    _as("rvsrathore17@gmail.com", "legal")
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"status": "verified", "note": "cleared manually, license confirmed"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["claim"]["status"] == "verified"
+    assert len(body["history"]) == 1
+    assert body["history"][0]["actor"] == "human"
+
+
+def test_override_claim_wrong_role_403s(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)  # kind=legal
+    _as("ujjwaltyagi9605@gmail.com", "editorial")  # editorial overrides factual, not legal
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"status": "verified", "note": "attempted override"},
+    )
+    assert response.status_code == 403
+
+
+def test_override_claim_producer_always_403s(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"status": "verified", "note": "attempted override"},
+    )
+    assert response.status_code == 403
+
+
+def test_override_risk_without_existing_risk_409s(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    _as("rvsrathore17@gmail.com", "legal")
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"risk_level": "low", "note": "no evidence yet"},
+    )
+    assert response.status_code == 409
+
+
+def test_override_risk_with_existing_risk(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    evidence = Evidence(
+        claim_id=claim.claim_id,
+        cycle=1,
+        method="search",
+        output={},
+        basis=[],
+        overall_confidence=Confidence.HIGH,
+        created_at=datetime.now(UTC),
+    )
+    EvidenceRepo.insert(db_session, evidence)
+    RiskRepo.upsert(
+        db_session,
+        Risk(
+            claim_id=claim.claim_id,
+            evidence_id=evidence.evidence_id,
+            level=RiskLevel.HIGH,
+            score=0.8,
+            rationale="initial assessment",
+            assessed_at=datetime.now(UTC),
+        ),
+    )
+    db_session.commit()
+    _as("rvsrathore17@gmail.com", "legal")
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"risk_level": "low", "note": "reviewed, license confirmed clear"},
+    )
+    assert response.status_code == 200
+    assert response.json()["risk"]["level"] == "low"
+
+
+def test_events_feed(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.get("/projects/demo/events")
+    assert response.status_code == 200
+    assert response.json() == {"events": [], "next_before": None}
+
+
+def test_metrics(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    response = client.get("/projects/demo/metrics")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["counts_by_status"] == {}
+    assert body["current_cadence"] in {"1h", "1d", "1w"}

@@ -29,7 +29,7 @@ from packages.claims.models import (
     SourceRef,
     VerificationEvent,
 )
-from packages.common.errors import NotFound
+from packages.common.errors import Conflict, NotFound
 from packages.ledger.tables import (
     AssetRow,
     ClaimRow,
@@ -93,6 +93,35 @@ class ProjectRepo:
         if project is None:
             raise NotFound("project", project_id)
         return project
+
+    @staticmethod
+    def list_all(session: Session) -> list[Project]:
+        """PHASE_08.md §8.1: the dashboard's project list. Small, fixed cardinality
+        (one row per real production) -- no pagination needed at this project's scale."""
+        rows = session.scalars(select(ProjectRow).order_by(ProjectRow.created_at.desc())).all()
+        return [_project_from_row(r) for r in rows]
+
+    @staticmethod
+    def create(session: Session, project: Project) -> None:
+        """POST /projects (PHASE_08.md §8.1) -- unlike `upsert`, a genuine create:
+        errors if `project_id` already exists rather than silently overwriting it, since
+        a human calling this expects normal REST create semantics, not idempotent
+        upsert (which every *pipeline* caller of `upsert` actually wants instead)."""
+        existing = ProjectRepo.get(session, project.project_id)
+        if existing is not None:
+            raise Conflict("project", project.project_id)
+        session.add(
+            ProjectRow(
+                project_id=project.project_id,
+                studio_id=project.studio_id,
+                title=project.title,
+                release_date=project.release_date,
+                shooting_countries=project.shooting_countries,
+                distribution_territories=project.distribution_territories,
+                budget_cap_usd=project.budget_cap_usd,
+                created_at=project.created_at,
+            )
+        )
 
     @staticmethod
     def spend(session: Session, project_id: str) -> Decimal:

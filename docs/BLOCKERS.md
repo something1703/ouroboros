@@ -49,4 +49,11 @@ Format per entry:
 **Status:** open
 
 ---
+## [PHASE 8.6] Google OAuth 2.0 Client ID for GIS sign-in needs the Cloud Console UI            (opened: 2026-09-05 22:50 IST)
+**Tried:** Phase 8's role-gated dashboard uses Google Identity Services (GIS) sign-in instead of Cloud IAP (no GCP Organization exists — `docs/DECISIONS.md` #104). GIS sign-in needs a real Google OAuth 2.0 "Web application" Client ID for the backend (`services/dashboard_api/auth.py`) to verify tokens against (`audience=GOOGLE_OAUTH_CLIENT_ID`). Checked for a gcloud/Terraform path to create one on a personal, non-org project: `gcloud alpha/beta` have no generic OAuth-client-management commands (only `iap.oauth-brands`, which itself needs an org — already a dead end per #104); there is no `google_iap_client`-equivalent Terraform resource for a plain, non-IAP OAuth client either.
+**Error / gap:** Creating a "Sign in with Google" OAuth 2.0 Client ID (and its associated OAuth consent screen, "External" user type) is a Cloud Console-only flow for a personal-account project — millions of non-org projects do this every day via the UI, but there is no CLI/API surface for it that this sandbox can drive.
+**Need from human:** In the Cloud Console, go to **APIs & Services → OAuth consent screen** (choose "External"), then **APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application**. Add the dashboard's real URL(s) to "Authorized JavaScript origins" once `web/` is deployed. Paste the resulting Client ID here (or set it directly: `gcloud secrets create GOOGLE_OAUTH_CLIENT_ID --data-file=-` / add it as a Cloud Run env var, whichever this session ends up using for it). Until then, every auth-gated dashboard endpoint returns `401 GOOGLE_OAUTH_CLIENT_ID not configured` — the code itself is real and complete, this is the one remaining human-only input, ~5 minutes of console clicking.
+**Status:** open
+
+---
 All of §A (A1–A6) resolved 2026-09-03: project `ouroboros-507503`, IAM owner confirmed, region `us-central1`, Parallel API key stored in Secret Manager, repo URL supplied, BYOK decided. See `docs/DECISIONS.md` #015.

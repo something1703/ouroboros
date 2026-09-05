@@ -78,7 +78,7 @@ jobs:
           gcloud run deploy dashboard-api --region="$OUROBOROS_REGION" \
             --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/dashboard-api:latest" \
             --service-account="sa-dashboard-api@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST}" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}" \
             --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
             --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
             --vpc-egress=private-ranges-only --memory=1Gi \
@@ -104,6 +104,13 @@ jobs:
           # POST /runs call, not at container startup.
           AGENT_ENGINE_RESOURCE_NAME: ${{ vars.AGENT_ENGINE_RESOURCE_NAME }}
           AUTO_RUN_AFTER_INGEST: ${{ vars.AUTO_RUN_AFTER_INGEST || 'false' }}
+          # Phase 8.1/8.6: a Google OAuth 2.0 Web-application Client ID (not a secret --
+          # GIS Client IDs are meant to be embedded in frontend JS) for verifying GIS
+          # sign-in tokens (docs/DECISIONS.md #104, docs/BLOCKERS.md). Empty until the
+          # human creates one via the Cloud Console (no gcloud/Terraform path exists on
+          # this non-org project) -- until then every auth-gated endpoint 401s, same
+          # empty-is-fine-for-now pattern as AGENT_ENGINE_RESOURCE_NAME above.
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
 
       - name: Build + deploy toolbox-public
         run: |

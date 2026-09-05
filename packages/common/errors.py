@@ -43,3 +43,12 @@ class NotFound(OuroborosError):
         self.kind = kind
         self.identifier = identifier
         super().__init__(f"{kind} not found: {identifier}")
+
+
+class Conflict(OuroborosError):
+    """A create call's identifier already exists (PHASE_08.md §8.1's POST /projects)."""
+
+    def __init__(self, kind: str, identifier: str) -> None:
+        self.kind = kind
+        self.identifier = identifier
+        super().__init__(f"{kind} already exists: {identifier}")

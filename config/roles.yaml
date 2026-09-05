@@ -1,0 +1,12 @@
+# Phase 8.1/8.6 — email -> role mapping for the dashboard's role-gated access.
+#
+# Roles (PHASE_08.md §8.1): `legal` can override legal-kind claims, `editorial` can
+# override factual-kind claims, `producer` is read-only + exports. Enforced via Google
+# Identity Services sign-in (docs/DECISIONS.md; no GCP Organization exists for classic
+# Cloud IAP -- see the project memory this decision came from), not Cloud IAP.
+#
+# Edit freely -- these are real test accounts the user gave to exercise the role
+# matrix, not a creative/product decision.
+rvsrathore17@gmail.com: legal
+ujjwaltyagi9605@gmail.com: editorial
+iamrudra1703@gmail.com: producer

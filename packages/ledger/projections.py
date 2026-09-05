@@ -199,3 +199,28 @@ class Projector:
         if finished_at is not None:
             data["finished_at"] = finished_at
         doc_ref.set(data, merge=True)
+
+    def get_project_summary(self, project_id: str) -> dict[str, object] | None:
+        """PHASE_08.md §8.1's metrics endpoint reads the already-computed
+        `project_summary` doc rather than recomputing drift/counts from Cloud SQL —
+        that logic already lives in `reverify_worker`/`services/ingest`, the only two
+        real writers of this doc; a second, independent computation here would just be
+        a second place for the two to drift apart."""
+        doc = self._client.collection("projects").document(project_id).get()
+        return doc.to_dict() if doc.exists else None
+
+    def list_events(
+        self, project_id: str, *, limit: int = 50, before: datetime | None = None
+    ) -> list[dict[str, object]]:
+        """Paged, newest-first (PHASE_08.md §8.1's events feed). `before` is the `at`
+        timestamp of the last item on the previous page — Firestore's own natural
+        cursor, no separate offset/token bookkeeping needed."""
+        query = (
+            self._client.collection("projects")
+            .document(project_id)
+            .collection("events")
+            .order_by("at", direction=firestore.Query.DESCENDING)
+        )
+        if before is not None:
+            query = query.where("at", "<", before)
+        return [dict(doc.to_dict() or {}, event_id=doc.id) for doc in query.limit(limit).stream()]

@@ -11,28 +11,30 @@ from __future__ import annotations
 import base64
 import json
 import os
-from datetime import timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 import google.auth
 import google.auth.transport.requests as gauth_requests
 import google.cloud.storage as storage
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from config.parallel import days_to_release, frequency_for
-from packages.claims.enums import ClaimCategory, VerificationStatus
-from packages.claims.models import Asset, Claim, Segment
-from packages.common.errors import NotFound
+from packages.claims.enums import ClaimCategory, RiskLevel, VerificationStatus
+from packages.claims.models import Asset, Claim, Evidence, Project, Risk, Segment, VerificationEvent
+from packages.common.errors import Conflict, NotFound
 from packages.common.logging import get_logger
 from packages.common.tracing import configure_tracing, instrument_fastapi
 from packages.ledger.db import session_scope
+from packages.ledger.projections import Projector
 from packages.ledger.repositories import (
     AssetRepo,
     ClaimRepo,
     EvidenceRepo,
+    HistoryRepo,
     MonitorRepo,
     ProjectRepo,
     RiskRepo,
@@ -40,6 +42,7 @@ from packages.ledger.repositories import (
 from packages.parallel_client.monitor import trigger as monitor_trigger
 from packages.parallel_client.monitor import update as monitor_update
 
+from .auth import UserContext, get_current_user
 from .runs import start_run
 
 configure_tracing(service="dashboard_api")
@@ -48,9 +51,12 @@ log = get_logger(__name__)
 app = FastAPI(title="Ouroboros Dashboard API")
 instrument_fastapi(app)
 
+_projector = Projector()
+
 UPLOAD_URL_TTL = timedelta(minutes=15)
 PLAYBACK_URL_TTL = timedelta(hours=1)
 _CUT_SUFFIXES = {"mp4", "mov"}
+_EVENTS_PAGE_LIMIT = 50
 
 
 class UploadRequest(BaseModel):
@@ -107,9 +113,59 @@ class PlaybackResponse(BaseModel):
     poster_url: str | None
 
 
+class CreateProjectRequest(BaseModel):
+    project_id: str
+    studio_id: str
+    title: str
+    release_date: str | None = None  # ISO date, e.g. "2026-10-10"
+    shooting_countries: list[str] = []
+    distribution_territories: list[str] = []
+    budget_cap_usd: float = 10.0
+
+
+class ClaimDetail(BaseModel):
+    """PHASE_08.md §8.1: a claim's full evidence history + risk + verification
+    history, for the claim drawer — one round trip instead of four."""
+
+    claim: Claim
+    evidence_history: list[Evidence]
+    risk: Risk | None
+    history: list[VerificationEvent]
+
+
+class HumanOverrideRequest(BaseModel):
+    """PATCH body for a human overriding a claim's status and/or risk level, with a
+    required note recorded into `verification_history` (`actor="human"`)."""
+
+    status: VerificationStatus | None = None
+    risk_level: RiskLevel | None = None
+    note: str
+
+
+class EventsFeedResponse(BaseModel):
+    events: list[dict[str, object]]
+    next_before: str | None  # pass back as `?before=` to fetch the next page
+
+
+class MetricsResponse(BaseModel):
+    reality_drift: float | None
+    drift_7d: float | None
+    last_change_at: datetime | None
+    spend_usd: float | None
+    counts_by_status: dict[str, int]
+    counts_by_risk: dict[str, int]
+    days_to_release: int
+    current_cadence: str
+
+
 @app.exception_handler(NotFound)
 def _not_found_handler(_request: Request, exc: NotFound) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(Conflict)
+def _conflict_handler(_request: Request, exc: Conflict) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.get("/healthz")
@@ -146,6 +202,194 @@ def list_claims(
         return ClaimRepo.list_by_project(
             session, project_id, status=status, category=category.value if category else None
         )
+
+
+@app.get("/projects", response_model=list[Project])
+def list_projects(_user: UserContext = Depends(get_current_user)) -> list[Project]:
+    with session_scope() as session:
+        return ProjectRepo.list_all(session)
+
+
+@app.get("/projects/{project_id}", response_model=Project)
+def get_project(project_id: str, _user: UserContext = Depends(get_current_user)) -> Project:
+    with session_scope() as session:
+        return ProjectRepo.require(session, project_id)
+
+
+@app.post("/projects", response_model=Project, status_code=201)
+def create_project(
+    body: CreateProjectRequest, _user: UserContext = Depends(get_current_user)
+) -> Project:
+    project = Project(
+        project_id=body.project_id,
+        studio_id=body.studio_id,
+        title=body.title,
+        release_date=date.fromisoformat(body.release_date) if body.release_date else None,
+        shooting_countries=body.shooting_countries,
+        distribution_territories=body.distribution_territories,
+        budget_cap_usd=body.budget_cap_usd,
+        created_at=datetime.now(UTC),
+    )
+    with session_scope() as session:
+        ProjectRepo.create(session, project)
+    return project
+
+
+@app.get("/projects/{project_id}/claims/{claim_id}", response_model=ClaimDetail)
+def get_claim_detail(
+    project_id: str, claim_id: str, _user: UserContext = Depends(get_current_user)
+) -> ClaimDetail:
+    with session_scope() as session:
+        ProjectRepo.require(session, project_id)
+        claim = ClaimRepo.require(session, claim_id)
+        if claim.project_id != project_id:
+            raise NotFound("claim", claim_id)
+        return ClaimDetail(
+            claim=claim,
+            evidence_history=EvidenceRepo.history_for_claim(session, claim_id),
+            risk=RiskRepo.get(session, claim_id),
+            history=HistoryRepo.for_claim(session, claim_id),
+        )
+
+
+@app.patch("/projects/{project_id}/claims/{claim_id}", response_model=ClaimDetail)
+def override_claim(
+    project_id: str,
+    claim_id: str,
+    body: HumanOverrideRequest,
+    user: UserContext = Depends(get_current_user),
+) -> ClaimDetail:
+    if body.status is None and body.risk_level is None:
+        raise HTTPException(422, "must override at least one of status/risk_level")
+
+    with session_scope() as session:
+        ProjectRepo.require(session, project_id)
+        claim = ClaimRepo.require(session, claim_id)
+        if claim.project_id != project_id:
+            raise NotFound("claim", claim_id)
+        _require_override_role(user, claim.kind.value)
+
+        now = datetime.now(UTC)
+        if body.status is not None:
+            HistoryRepo.append(
+                session,
+                VerificationEvent(
+                    claim_id=claim_id,
+                    at=now,
+                    actor="human",
+                    from_status=claim.status,
+                    to_status=body.status,
+                    note=body.note,
+                    ref={"user": user.email},
+                ),
+            )
+            ClaimRepo.set_status(session, claim_id, body.status)
+
+        if body.risk_level is not None:
+            existing_risk = RiskRepo.get(session, claim_id)
+            if existing_risk is None:
+                raise HTTPException(409, "claim has no assessed risk yet to override")
+            RiskRepo.upsert(
+                session,
+                existing_risk.model_copy(
+                    update={
+                        "level": body.risk_level,
+                        "rationale": f"Human override by {user.email}: {body.note}",
+                        "assessed_at": now,
+                    }
+                ),
+            )
+            HistoryRepo.append(
+                session,
+                VerificationEvent(
+                    claim_id=claim_id,
+                    at=now,
+                    actor="human",
+                    from_status=body.status or claim.status,
+                    to_status=body.status or claim.status,
+                    note=f"risk override: {existing_risk.level.value} -> {body.risk_level.value}. {body.note}",
+                    ref={"user": user.email, "override": "risk"},
+                ),
+            )
+
+        updated_claim = ClaimRepo.require(session, claim_id)
+        evidence_history = EvidenceRepo.history_for_claim(session, claim_id)
+        risk = RiskRepo.get(session, claim_id)
+        history = HistoryRepo.for_claim(session, claim_id)
+
+    _projector.claim_view(
+        project_id=project_id,
+        claim_id=claim_id,
+        category=updated_claim.category.value,
+        entity_text=updated_claim.entity_text,
+        claim_text=updated_claim.claim_text,
+        priority=updated_claim.priority,
+        status=updated_claim.status.value,
+        updated_at=now,
+        risk_level=risk.level.value if risk else None,
+        risk_score=risk.score if risk else None,
+        evidence_summary=_evidence_summary(evidence_history[-1] if evidence_history else None),
+        history_count=len(history),
+        monitor_status=None,
+        prior_production_note=updated_claim.prior_production_note,
+    )
+    return ClaimDetail(
+        claim=updated_claim, evidence_history=evidence_history, risk=risk, history=history
+    )
+
+
+@app.get("/projects/{project_id}/events", response_model=EventsFeedResponse)
+def list_events(
+    project_id: str,
+    before: datetime | None = Query(default=None),
+    _user: UserContext = Depends(get_current_user),
+) -> EventsFeedResponse:
+    with session_scope() as session:
+        ProjectRepo.require(session, project_id)
+    events = _projector.list_events(project_id, limit=_EVENTS_PAGE_LIMIT, before=before)
+    next_before = str(events[-1]["at"]) if len(events) == _EVENTS_PAGE_LIMIT else None
+    return EventsFeedResponse(events=events, next_before=next_before)
+
+
+@app.get("/projects/{project_id}/metrics", response_model=MetricsResponse)
+def get_metrics(project_id: str, _user: UserContext = Depends(get_current_user)) -> MetricsResponse:
+    with session_scope() as session:
+        project = ProjectRepo.require(session, project_id)
+    summary = _projector.get_project_summary(project_id) or {}
+    days_left = days_to_release(project.release_date)
+    return MetricsResponse(
+        reality_drift=summary.get("reality_drift"),
+        drift_7d=summary.get("drift_7d"),
+        last_change_at=summary.get("last_change_at"),
+        spend_usd=summary.get("spend_usd"),
+        counts_by_status=summary.get("counts_by_status") or {},
+        counts_by_risk=summary.get("counts_by_risk") or {},
+        days_to_release=days_left,
+        current_cadence=frequency_for(days_left),
+    )
+
+
+def _require_override_role(user: UserContext, claim_kind: str) -> None:
+    """`legal` overrides `kind=legal` claims, `editorial` overrides `kind=factual` ones
+    (PHASE_08.md §8.1); `producer` is read-only and can never override either."""
+    allowed = {"legal": "legal", "editorial": "factual"}.get(user.role)
+    if allowed != claim_kind:
+        raise HTTPException(403, f"role {user.role!r} cannot override a {claim_kind!r} claim")
+
+
+def _evidence_summary(evidence: Evidence | None) -> dict[str, object] | None:
+    if evidence is None:
+        return None
+    top_citations = []
+    for field_basis in evidence.basis[:3]:
+        if field_basis.citations:
+            top_citations.append(field_basis.citations[0].url)
+    return {
+        "method": evidence.method,
+        "confidence": evidence.overall_confidence.value,
+        "cycle": evidence.cycle,
+        "top_citations": top_citations,
+    }
 
 
 @app.get("/assets/{asset_id}/timeline", response_model=TimelineResponse)

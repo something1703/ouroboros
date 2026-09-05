@@ -73,7 +73,8 @@ parameters:
     description: Maximum rows to return.
     default: 50
 statement: |
-  SELECT claim_id, project_id, category, entity_text, claim_text, priority, status, created_at
+  SELECT claim_id, project_id, kind, category, entity_text, claim_text, priority, status, created_at,
+    source ->> 'channel' AS channel
   FROM claims
   WHERE project_id = $1
     AND ($2 = '' OR status = $2)
@@ -406,6 +407,24 @@ statement: |
   GROUP BY r.level;
 
 ---
+# PHASE_06.md §6.1: FactAgent's ±20s transcript-window context. Returns the whole
+# segments array (small — a handful of KB even for a long cut) rather than filtering
+# by time range in SQL; `agents/ouroboros/tools/fact_tools.py` does the ±20s windowing
+# in code, the same "deterministic filtering, not LLM judgment" pattern as CLEAR's
+# specialist algorithm.
+kind: tool
+name: get_asset_segments
+type: postgres-sql
+source: ouroboros_pg
+description: Get a cut asset's full transcript segments array (empty for a script asset).
+parameters:
+  - name: asset_id
+    type: string
+    description: The asset to get segments for.
+statement: |
+  SELECT segments FROM assets WHERE asset_id = $1;
+
+---
 # --- Toolsets ---
 
 kind: toolset
@@ -419,6 +438,7 @@ tools:
   - count_history
   - project_status_counts
   - project_risk_counts
+  - get_asset_segments
 
 ---
 kind: toolset

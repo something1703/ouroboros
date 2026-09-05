@@ -50,7 +50,10 @@ def list_claims(
     project_id: str, status: str = "", category: str = "", result_limit: int = 50
 ) -> str:
     """List claims for a project, optionally filtered by status and/or category. Pass
-    an empty string for either filter to skip it. Returns a JSON array."""
+    an empty string for either filter to skip it. Returns a JSON array; each claim
+    includes `kind` (`legal` or `factual`) so a caller can branch on it, and `channel`
+    (`dialogue`/`narration`/`on_screen_text`/`visual`/`action_line`/null) for TRUE CUT's
+    channel-aware priority rubric (ADK_AGENTS.md §3.3)."""
     return str(
         _tools()["list_claims"](
             project_id=project_id, status=status, category=category, result_limit=result_limit
@@ -232,6 +235,14 @@ def project_risk_counts(project_id: str) -> str:
     return str(_tools()["project_risk_counts"](project_id=project_id))
 
 
+def get_asset_segments(asset_id: str) -> str:
+    """Get a cut asset's full transcript segments (empty for a script asset). Returns a
+    JSON object with `segments`, each `{t_start_ms, t_end_ms, speaker, transcript}` in
+    absolute video time. PHASE_06.md §6.1: FactAgent builds a claim's ±20s context
+    window from this rather than re-running video understanding per claim."""
+    return str(_tools()["get_asset_segments"](asset_id=asset_id))
+
+
 READ_TOOLS = [
     get_claim,
     list_claims,
@@ -241,6 +252,7 @@ READ_TOOLS = [
     count_history,
     project_status_counts,
     project_risk_counts,
+    get_asset_segments,
 ]
 WRITE_TOOLS = [record_evidence, set_status, record_risk, record_monitor, record_cost]
 ALL_TOOLS = [*READ_TOOLS, *WRITE_TOOLS]

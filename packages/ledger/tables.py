@@ -63,6 +63,9 @@ class AssetRow(Base):
     language: Mapped[str | None] = mapped_column(Text)
     page_count: Mapped[int | None] = mapped_column(Integer)
     duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    segments: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
+    proxy_uri: Mapped[str | None] = mapped_column(Text)
+    poster_uri: Mapped[str | None] = mapped_column(Text)
     ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (CheckConstraint("kind in ('script','cut')", name="assets_kind_check"),)

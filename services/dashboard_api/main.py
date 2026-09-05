@@ -20,14 +20,15 @@ import google.cloud.storage as storage
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from packages.claims.enums import ClaimCategory, VerificationStatus
-from packages.claims.models import Asset, Claim
+from packages.claims.models import Asset, Claim, Segment
 from packages.common.errors import NotFound
 from packages.common.logging import get_logger
 from packages.common.tracing import configure_tracing, instrument_fastapi
 from packages.ledger.db import session_scope
-from packages.ledger.repositories import AssetRepo, ClaimRepo, ProjectRepo
+from packages.ledger.repositories import AssetRepo, ClaimRepo, EvidenceRepo, ProjectRepo, RiskRepo
 
 from .runs import start_run
 
@@ -38,6 +39,7 @@ app = FastAPI(title="Ouroboros Dashboard API")
 instrument_fastapi(app)
 
 UPLOAD_URL_TTL = timedelta(minutes=15)
+PLAYBACK_URL_TTL = timedelta(hours=1)
 _CUT_SUFFIXES = {"mp4", "mov"}
 
 
@@ -58,6 +60,41 @@ class StartRunRequest(BaseModel):
 
 class StartRunResponse(BaseModel):
     run_id: str
+
+
+class TimelineClaim(BaseModel):
+    """One claim positioned on an asset's timeline (PHASE_06.md §6.4). `t_start_ms`/
+    `t_end_ms`/`channel` are null for a script-asset claim (page-based, not time-based)
+    — the UI's video scrubber only ever plots claims that have them."""
+
+    claim_id: str
+    kind: str
+    category: str
+    claim_text: str
+    t_start_ms: int | None
+    t_end_ms: int | None
+    channel: str | None
+    status: str
+    verdict: str | None
+    risk_level: str | None
+    top_citation: str | None
+
+
+class TimelineResponse(BaseModel):
+    asset_id: str
+    duration_ms: int | None
+    segments: list[Segment]
+    claims: list[TimelineClaim]
+
+
+class SegmentsResponse(BaseModel):
+    asset_id: str
+    segments: list[Segment]
+
+
+class PlaybackResponse(BaseModel):
+    proxy_url: str | None
+    poster_url: str | None
 
 
 @app.exception_handler(NotFound)
@@ -99,6 +136,77 @@ def list_claims(
         return ClaimRepo.list_by_project(
             session, project_id, status=status, category=category.value if category else None
         )
+
+
+@app.get("/assets/{asset_id}/timeline", response_model=TimelineResponse)
+def get_asset_timeline(asset_id: str) -> TimelineResponse:
+    """PHASE_06.md §6.4: segments + every claim sourced from this asset, each with its
+    latest verdict/risk/top citation so the UI can plot a scrubber without a second
+    round trip per claim."""
+    with session_scope() as session:
+        asset = AssetRepo.get(session, asset_id)
+        if asset is None:
+            raise NotFound("asset", asset_id)
+        claims = ClaimRepo.list_by_asset(session, asset_id)
+        timeline_claims = [_timeline_claim(session, claim) for claim in claims]
+    timeline_claims.sort(key=lambda c: (c.t_start_ms is None, c.t_start_ms or 0))
+    return TimelineResponse(
+        asset_id=asset.asset_id,
+        duration_ms=asset.duration_ms,
+        segments=asset.segments,
+        claims=timeline_claims,
+    )
+
+
+@app.get("/assets/{asset_id}/segments", response_model=SegmentsResponse)
+def get_asset_segments(asset_id: str) -> SegmentsResponse:
+    with session_scope() as session:
+        asset = AssetRepo.get(session, asset_id)
+        if asset is None:
+            raise NotFound("asset", asset_id)
+        return SegmentsResponse(asset_id=asset.asset_id, segments=asset.segments)
+
+
+@app.get("/assets/{asset_id}/proxy", response_model=PlaybackResponse)
+def get_asset_proxy(asset_id: str) -> PlaybackResponse:
+    """PHASE_06.md §6.4: signed GET URLs for the low-res proxy MP4 + poster frame
+    ffmpeg generated at ingest. Both fields are null (not a 404) for a script asset, or
+    a cut asset ingested before this feature existed / without ARTIFACTS_BUCKET set."""
+    with session_scope() as session:
+        asset = AssetRepo.get(session, asset_id)
+        if asset is None:
+            raise NotFound("asset", asset_id)
+    return PlaybackResponse(
+        proxy_url=_generate_playback_url(asset.proxy_uri) if asset.proxy_uri else None,
+        poster_url=_generate_playback_url(asset.poster_uri) if asset.poster_uri else None,
+    )
+
+
+def _timeline_claim(session: Session, claim: Claim) -> TimelineClaim:
+    evidence = EvidenceRepo.latest_for_claim(session, claim.claim_id)
+    risk = RiskRepo.get(session, claim.claim_id)
+    verdict = None
+    top_citation = None
+    if evidence is not None:
+        raw_verdict = evidence.output.get("verdict")
+        verdict = str(raw_verdict) if raw_verdict is not None else None
+        for field_basis in evidence.basis:
+            if field_basis.citations:
+                top_citation = field_basis.citations[0].url
+                break
+    return TimelineClaim(
+        claim_id=claim.claim_id,
+        kind=claim.kind.value,
+        category=claim.category.value,
+        claim_text=claim.claim_text,
+        t_start_ms=claim.source.t_start_ms,
+        t_end_ms=claim.source.t_end_ms,
+        channel=claim.source.channel,
+        status=claim.status.value,
+        verdict=verdict,
+        risk_level=risk.level.value if risk else None,
+        top_citation=top_citation,
+    )
 
 
 @app.post("/projects/{project_id}/runs", response_model=StartRunResponse)
@@ -153,8 +261,24 @@ def _object_name(project_id: str, *, kind: Literal["script", "cut"], filename: s
 
 
 def _generate_upload_url(bucket_name: str, object_name: str) -> str:
-    """V4 signed PUT URL, signed via the IAM Credentials API rather than a private key
-    file (Cloud Run's attached-service-account credentials carry no private key) — see
+    return _generate_signed_url(bucket_name, object_name, method="PUT", expiration=UPLOAD_URL_TTL)
+
+
+def _generate_playback_url(gcs_uri: str) -> str:
+    """Signed GET URL for a `gs://...` artifact (proxy MP4/poster JPEG) so the UI can
+    play/scrub it without the original, often much larger and non-public, source file
+    (PHASE_06.md §6.4)."""
+    if not gcs_uri.startswith("gs://"):
+        raise ValueError(f"expected a gs:// URI, got {gcs_uri!r}")
+    bucket_name, _, object_name = gcs_uri.removeprefix("gs://").partition("/")
+    return _generate_signed_url(bucket_name, object_name, method="GET", expiration=PLAYBACK_URL_TTL)
+
+
+def _generate_signed_url(
+    bucket_name: str, object_name: str, *, method: Literal["PUT", "GET"], expiration: timedelta
+) -> str:
+    """V4 signed URL, signed via the IAM Credentials API rather than a private key file
+    (Cloud Run's attached-service-account credentials carry no private key) — see
     docs/DECISIONS.md and infra/modules/iam (`roles/iam.serviceAccountTokenCreator`
     granted to sa-dashboard-api on itself)."""
     credentials, _ = google.auth.default()
@@ -162,8 +286,8 @@ def _generate_upload_url(bucket_name: str, object_name: str) -> str:
     blob = storage.Client().bucket(bucket_name).blob(object_name)
     url: str = blob.generate_signed_url(
         version="v4",
-        expiration=UPLOAD_URL_TTL,
-        method="PUT",
+        expiration=expiration,
+        method=method,
         service_account_email=credentials.service_account_email,  # type: ignore[attr-defined]
         access_token=credentials.token,
     )

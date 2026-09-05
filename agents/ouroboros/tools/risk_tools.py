@@ -17,7 +17,8 @@ def gather_risk_inputs(claim_ids: list[str]) -> dict[str, object]:
     deterministic pre-score. Returns one entry per claim with everything RiskAssessor
     needs to decide whether to adjust the level ±1: the pre-scored level/score/
     rationale, the raw evidence output (including any `territory_notes` field), and
-    the claim's category/priority/jurisdictions. Claims with no evidence yet are
+    the claim's kind/category/priority/jurisdictions (`kind` decides which rubric in
+    `risk_assessor.md` applies). Claims with no evidence yet are
     skipped (not included in the result) — that shouldn't happen for a claim already
     in a `*_results.verified`/`escalated` list, but a specialist error could leave one
     behind.
@@ -49,6 +50,7 @@ def gather_risk_inputs(claim_ids: list[str]) -> dict[str, object]:
             {
                 "claim_id": claim_id,
                 "evidence_id": evidence.evidence_id,
+                "kind": claim.kind.value,
                 "category": claim.category.value,
                 "priority": claim.priority,
                 "jurisdictions": claim.jurisdictions,

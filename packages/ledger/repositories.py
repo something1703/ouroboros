@@ -24,6 +24,7 @@ from packages.claims.models import (
     MonitorRecord,
     Project,
     Risk,
+    Segment,
     SourceRef,
     VerificationEvent,
 )
@@ -112,6 +113,9 @@ def _asset_from_row(row: AssetRow) -> Asset:
         language=row.language,
         page_count=row.page_count,
         duration_ms=row.duration_ms,
+        segments=[Segment.model_validate(s) for s in row.segments],
+        proxy_uri=row.proxy_uri,
+        poster_uri=row.poster_uri,
         ingested_at=row.ingested_at,
     )
 
@@ -127,6 +131,9 @@ class AssetRepo:
             language=asset.language,
             page_count=asset.page_count,
             duration_ms=asset.duration_ms,
+            segments=[s.model_dump(mode="json") for s in asset.segments],
+            proxy_uri=asset.proxy_uri,
+            poster_uri=asset.poster_uri,
             ingested_at=asset.ingested_at,
         )
         stmt = stmt.on_conflict_do_update(
@@ -136,6 +143,9 @@ class AssetRepo:
                 "language": stmt.excluded.language,
                 "page_count": stmt.excluded.page_count,
                 "duration_ms": stmt.excluded.duration_ms,
+                "segments": stmt.excluded.segments,
+                "proxy_uri": stmt.excluded.proxy_uri,
+                "poster_uri": stmt.excluded.poster_uri,
                 "ingested_at": stmt.excluded.ingested_at,
             },
         )
@@ -240,6 +250,17 @@ class ClaimRepo:
         if category is not None:
             stmt = stmt.where(ClaimRow.category == category)
         stmt = stmt.limit(limit)
+        rows = session.scalars(stmt).all()
+        return [_claim_from_row(r) for r in rows]
+
+    @staticmethod
+    def list_by_asset(session: Session, asset_id: str, *, limit: int = 500) -> list[Claim]:
+        """PHASE_06.md §6.4's timeline endpoint: every claim sourced from one asset,
+        regardless of project (an asset_id is already globally unique — see
+        `Asset.compute_id`). `source.asset_id` is nested JSONB, not a column, since a
+        claim's `SourceRef` covers both script (page-based) and cut (time-based)
+        assets."""
+        stmt = select(ClaimRow).where(ClaimRow.source["asset_id"].astext == asset_id).limit(limit)
         rows = session.scalars(stmt).all()
         return [_claim_from_row(r) for r in rows]
 

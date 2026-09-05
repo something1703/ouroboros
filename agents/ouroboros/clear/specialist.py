@@ -15,16 +15,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable, Sequence
-from decimal import Decimal
 
 from agents.ouroboros.tools import ledger
+from agents.ouroboros.tools.budget import check_and_record_cost, check_budget
+from agents.ouroboros.tools.evidence import set_status, write_evidence
 from agents.ouroboros.tools.mcp import toolbox_mcp_servers
 from packages.claims.enums import ClaimCategory, Confidence
-from packages.claims.models import FieldBasis
 from packages.common.errors import BudgetExceeded
-from packages.common.ids import new_ulid
 from packages.common.logging import get_logger
-from packages.parallel_client.cost import price_for
 from packages.parallel_client.search import SearchHit, build_objective, search
 from packages.parallel_client.task import TaskResult, build_input, should_escalate
 from packages.parallel_client.task import run as run_task
@@ -63,86 +61,6 @@ def _looks_public_domain(hits: Sequence[SearchHit]) -> bool:
     return False
 
 
-def _current_cycle(claim_id: str) -> int:
-    raw = ledger.get_claim(claim_id=claim_id)
-    row = json.loads(raw) if raw else None
-    if not row or row.get("cycle") is None:
-        return 0
-    return int(row["cycle"])
-
-
-def _write_evidence(
-    claim_id: str,
-    *,
-    method: str,
-    content: dict[str, object],
-    basis: Sequence[FieldBasis],
-    confidence: Confidence,
-    cost_usd: Decimal,
-    parallel_run_id: str | None = None,
-    processor: str | None = None,
-) -> None:
-    expected_cycle = _current_cycle(claim_id) + 1
-    ledger.record_evidence(
-        evidence_id=new_ulid(),
-        claim_id=claim_id,
-        expected_cycle=expected_cycle,
-        method=method,
-        output_json=json.dumps(content),
-        basis_json=json.dumps([b.model_dump(mode="json") for b in basis]),
-        overall_confidence=confidence.value,
-        cost_usd=float(cost_usd),
-        parallel_run_id=parallel_run_id or "",
-        processor=processor or "",
-    )
-
-
-def _check_budget(project_id: str) -> None:
-    """Raises `BudgetExceeded` if the project is *already* over its cap. Toolbox-routed
-    (not a direct DB read via `packages.parallel_client.cost.check_budget`) — found
-    live, the deployed Agent Engine's runtime has no VPC path to Cloud SQL's private
-    IP, unlike Toolbox (a properly VPC-connected Cloud Run service), so a direct
-    SQLAlchemy connection from inside the agent process just hangs until timeout no
-    matter how large `max_connections` is (docs/DECISIONS.md #062)."""
-    row = json.loads(ledger.check_budget(project_id=project_id))
-    if Decimal(str(row["spend_usd"])) > Decimal(str(row["cap_usd"])):
-        raise BudgetExceeded(project_id, float(row["spend_usd"]), float(row["cap_usd"]))
-
-
-def _check_and_record_cost(project_id: str, claim_id: str, *, api: str, sku: str) -> Decimal:
-    """Pre-flight budget check + cost reservation for one priced Parallel call —
-    Toolbox-routed equivalent of `packages.parallel_client.cost.CostMeter` (see
-    `_check_budget` above for why). Skips `CostMeter`'s BigQuery streaming and
-    post-hoc `record_actual` correction: a best-effort analytics mirror, not needed
-    for the budget-enforcement behavior this replaces."""
-    estimated_cost = price_for(sku)
-    row = json.loads(ledger.check_budget(project_id=project_id))
-    spend = Decimal(str(row["spend_usd"]))
-    cap = Decimal(str(row["cap_usd"]))
-    if spend + estimated_cost > cap:
-        raise BudgetExceeded(project_id, float(spend), float(cap))
-    ledger.record_cost(
-        project_id=project_id,
-        claim_id=claim_id,
-        api=api,
-        sku=sku,
-        units=1,
-        cost_usd=float(estimated_cost),
-    )
-    return estimated_cost
-
-
-def _set_status(claim_id: str, status: str, *, note: str) -> None:
-    ledger.set_status(
-        claim_id=claim_id,
-        new_status=status,
-        actor="agent",
-        note=note,
-        ref_json="{}",
-        event_id=new_ulid(),
-    )
-
-
 def _verify_one_claim(
     claim_id: str,
     *,
@@ -160,7 +78,7 @@ def _verify_one_claim(
     `legal_location_artwork`), and `build_objective`'s per-category template must match
     each claim's *real* category, not the batch's spec choice.
     """
-    _check_budget(project_id)
+    check_budget(project_id)
 
     claim_row = json.loads(ledger.get_claim(claim_id=claim_id))
     category = ClaimCategory(claim_row["category"])
@@ -173,13 +91,13 @@ def _verify_one_claim(
     objective, queries = build_objective(category, entity_text, jurisdictions)
     location = jurisdictions[0] if jurisdictions else None
 
-    total_cost = _check_and_record_cost(project_id, claim_id, api="search", sku="search.fast")
+    total_cost = check_and_record_cost(project_id, claim_id, api="search", sku="search.fast")
     search_result = search(
         objective, queries, category=category, location=location, claim_id=claim_id
     )
 
     if priority >= 4 and _looks_public_domain(search_result.hits):
-        _write_evidence(
+        write_evidence(
             claim_id,
             method="search",
             content={
@@ -190,9 +108,7 @@ def _verify_one_claim(
             confidence=Confidence.MEDIUM,
             cost_usd=total_cost,
         )
-        _set_status(
-            claim_id, "verified", note="search-only: obvious public-domain/no-rights signal"
-        )
+        set_status(claim_id, "verified", note="search-only: obvious public-domain/no-rights signal")
         return "verified"
 
     top_urls = [hit.url for hit in search_result.hits[:5]]
@@ -201,7 +117,7 @@ def _verify_one_claim(
     )
 
     mcp_servers = toolbox_mcp_servers()
-    total_cost += _check_and_record_cost(project_id, claim_id, api="task", sku="task.core-fast")
+    total_cost += check_and_record_cost(project_id, claim_id, api="task", sku="task.core-fast")
     result = run_task(
         task_input,
         spec_name,
@@ -215,7 +131,7 @@ def _verify_one_claim(
 
     status = "verified"
     if should_escalate(result.overall_confidence, priority):
-        total_cost += _check_and_record_cost(project_id, claim_id, api="task", sku="task.pro")
+        total_cost += check_and_record_cost(project_id, claim_id, api="task", sku="task.pro")
         escalated_result = run_task(
             task_input,
             spec_name,
@@ -235,7 +151,7 @@ def _verify_one_claim(
     if augment is not None:
         content = augment(claim_row, content)
 
-    _write_evidence(
+    write_evidence(
         claim_id,
         method="task",
         content=content,
@@ -245,7 +161,7 @@ def _verify_one_claim(
         parallel_run_id=result.run_id,
         processor=result.processor,
     )
-    _set_status(
+    set_status(
         claim_id, status, note=f"{category.value} specialist: {spec_name} via {result.processor}"
     )
     return status
@@ -282,12 +198,12 @@ async def verify_batch(
                 (verified if status == "verified" else escalated).append(claim_id)
             except BudgetExceeded as exc:
                 errors.append({"claim_id": claim_id, "error": f"budget_exceeded: {exc}"})
-                await asyncio.to_thread(_set_status, claim_id, "pending", note="budget exceeded")
+                await asyncio.to_thread(set_status, claim_id, "pending", note="budget exceeded")
             except Exception as exc:
                 log.error("specialist_claim_failed", claim_id=claim_id, error=str(exc))
                 errors.append({"claim_id": claim_id, "error": str(exc)})
                 try:
-                    await asyncio.to_thread(_set_status, claim_id, "error", note=str(exc)[:500])
+                    await asyncio.to_thread(set_status, claim_id, "error", note=str(exc)[:500])
                 except Exception:
                     log.error("specialist_status_write_failed", claim_id=claim_id)
 

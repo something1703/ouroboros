@@ -14,6 +14,12 @@ locals {
       "roles/cloudtrace.agent",
       "roles/modelarmor.user",
       "roles/eventarc.eventReceiver",
+      # PHASE_06.md §6.4: uploads the low-res proxy MP4 + poster frame it generates to
+      # the artifacts bucket (packages/gemini_client/video.py::_generate_proxy_and_poster).
+      # Also the fix for a pre-existing, never-yet-exercised gap: the multi-chunk video
+      # path (_split_chunks) already uploads chunks back to the intake bucket the same
+      # way, which objectViewer alone could never have permitted either.
+      "roles/storage.objectCreator",
     ]
     sa-webhook = [
       "roles/pubsub.publisher",
@@ -45,6 +51,11 @@ locals {
       # (PHASE_03.md §3.6) — needed for the actual `PUT` the client performs against it,
       # separate from roles/iam.serviceAccountTokenCreator below (which lets it *sign*).
       "roles/storage.objectCreator",
+      # Same principle, the read side (PHASE_06.md §6.4): a signed GET URL for the
+      # proxy MP4/poster JPEG is only valid for what sa-dashboard-api can itself read,
+      # regardless of the URL's own cryptographic validity — GCS still checks the
+      # signing identity's own permissions on the object at request time.
+      "roles/storage.objectViewer",
     ]
     sa-toolbox = [
       "roles/cloudsql.client",

@@ -12,6 +12,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from agents.ouroboros.clear.schemas import SpecialistOutput
 from agents.ouroboros.clear.specialist import verify_batch
 from agents.ouroboros.prompts.render import render
+from agents.ouroboros.tools import ledger
 from agents.ouroboros.tools.resilience import resilient_model
 from packages.parallel_client.extract import extract
 
@@ -56,7 +57,7 @@ def _instruction(ctx: ReadonlyContext) -> str:
             "and copyright status of any artwork for '{entity}' in {jurisdictions}."
         ),
         tool_name="verify_location_artwork_batch",
-        batch_key="location_artwork",
+        categories=["location", "artwork"],
         project_id=ctx.state.get("project_id", ""),
         studio_id=ctx.state.get("studio_id", ""),
         jurisdictions=", ".join(ctx.state.get("jurisdictions", [])),
@@ -67,7 +68,7 @@ location_art_agent = LlmAgent(
     name="LocationArtAgent",
     model=resilient_model("gemini-3.5-flash"),
     instruction=_instruction,
-    tools=[verify_location_artwork_batch],
+    tools=[ledger.list_claims, verify_location_artwork_batch],
     output_schema=SpecialistOutput,
     output_key="location_artwork_results",
 )

@@ -10,6 +10,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from agents.ouroboros.clear.schemas import SpecialistOutput
 from agents.ouroboros.clear.specialist import verify_batch
 from agents.ouroboros.prompts.render import render
+from agents.ouroboros.tools import ledger
 from agents.ouroboros.tools.resilience import resilient_model
 from packages.parallel_client.entity import search as entity_search
 
@@ -56,7 +57,7 @@ def _instruction(ctx: ReadonlyContext) -> str:
             "to license for '{entity}'."
         ),
         tool_name="verify_music_batch",
-        batch_key="music",
+        categories=["music"],
         project_id=ctx.state.get("project_id", ""),
         studio_id=ctx.state.get("studio_id", ""),
         jurisdictions=", ".join(ctx.state.get("jurisdictions", [])),
@@ -67,7 +68,7 @@ music_agent = LlmAgent(
     name="MusicAgent",
     model=resilient_model("gemini-3.5-flash"),
     instruction=_instruction,
-    tools=[verify_music_batch],
+    tools=[ledger.list_claims, verify_music_batch],
     output_schema=SpecialistOutput,
     output_key="music_results",
 )

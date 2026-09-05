@@ -15,6 +15,11 @@ class TriageBatches(BaseModel):
     brand: list[str] = Field(default_factory=list)
     person: list[str] = Field(default_factory=list)
     location_artwork: list[str] = Field(default_factory=list)
+    # TRUE CUT (PHASE_06.md, ADK_AGENTS.md §3): `fact` covers event/statistic/attribution
+    # claims (one shared FactAgent, unlike CLEAR's four category specialists); `archival`
+    # covers archival/identity claims (one shared ArchiveAgent).
+    fact: list[str] = Field(default_factory=list)
+    archival: list[str] = Field(default_factory=list)
 
 
 class TriageOutput(BaseModel):

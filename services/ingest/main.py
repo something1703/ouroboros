@@ -15,7 +15,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, Request, Response
 
 from packages.claims.enums import ClaimCategory
-from packages.claims.models import Asset, Claim, SourceRef
+from packages.claims.models import Asset, Claim, Segment, SourceRef
 from packages.common.errors import NotFound, SafetyBlocked
 from packages.common.logging import get_logger
 from packages.common.pubsub import publish_json
@@ -95,6 +95,9 @@ def _process_object(*, bucket: str, name: str, generation: str) -> None:
     claims: list[Claim]
     page_count: int | None
     duration_ms: int | None
+    segments: list[Segment] = []
+    proxy_uri: str | None = None
+    poster_uri: str | None = None
     with span("extract", asset_id=asset_id, kind=kind):
         if kind == "script":
             script_result = extract_script_claims(gcs_uri, asset_id=asset_id, project=project)
@@ -102,6 +105,8 @@ def _process_object(*, bucket: str, name: str, generation: str) -> None:
         else:
             cut_result = extract_cut_claims(gcs_uri, asset_id=asset_id, project=project)
             claims, page_count, duration_ms = cut_result.claims, None, cut_result.duration_ms
+            segments = cut_result.segments
+            proxy_uri, poster_uri = cut_result.proxy_uri, cut_result.poster_uri
 
     with span("screen", asset_id=asset_id, claim_count=len(claims)):
         screened = _screen_claims(claims)
@@ -121,6 +126,9 @@ def _process_object(*, bucket: str, name: str, generation: str) -> None:
                 language=language,
                 page_count=page_count,
                 duration_ms=duration_ms,
+                segments=segments,
+                proxy_uri=proxy_uri,
+                poster_uri=poster_uri,
                 ingested_at=datetime.now(UTC),
             ),
         )

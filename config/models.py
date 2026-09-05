@@ -41,3 +41,13 @@ MAX_SCRIPT_PAGES_PER_CHUNK = 40
 SCRIPT_CHUNK_OVERLAP_PAGES = 2
 MAX_VIDEO_MINUTES_PER_CHUNK = 20
 VIDEO_CHUNK_OVERLAP_SECONDS = 30
+
+# PHASE_06.md §6.4: low-res proxy + poster frame for the UI's scrubber, generated at
+# ingest alongside claim extraction (same downloaded local file, no second fetch).
+# 300k, not something higher like 800k: found live (docs/DECISIONS.md) that an archival
+# source already encoded at ~550kbps (video+audio combined) produced a *larger*
+# proxy than the original at 800k video-only, defeating the whole point of a "low-res"
+# proxy. 300k is comfortably below what most real source footage is encoded at.
+PROXY_MAX_HEIGHT_PX = 480
+PROXY_VIDEO_BITRATE = "300k"
+POSTER_FRAME_OFFSET_SECONDS = 1.0

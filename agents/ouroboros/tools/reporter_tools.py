@@ -12,9 +12,10 @@ from .rowparse import claim_from_row, evidence_from_row
 
 
 def gather_report_inputs(claim_ids: list[str]) -> dict[str, object]:
-    """For each claim_id: entity/claim text, category, risk level/score, the Task
+    """For each claim_id: kind, entity/claim text, category, risk level/score, the Task
     run_id (for creating a snapshot Monitor), and citation URLs (for `[n]` indices in
-    the summary). Claims with no risk assessed yet are skipped.
+    the summary). `kind` decides which Monitor rules in `reporter.md` apply. Claims
+    with no risk assessed yet are skipped.
 
     A claim that already has a Monitor is also skipped (docs/DECISIONS.md #075) —
     found live: on a retrigger, Reporter's own claim_ids now come from a ledger sweep
@@ -47,6 +48,7 @@ def gather_report_inputs(claim_ids: list[str]) -> dict[str, object]:
         results.append(
             {
                 "claim_id": claim_id,
+                "kind": claim.kind.value,
                 "category": claim.category.value,
                 "entity_text": claim.entity_text,
                 "claim_text": claim.claim_text,

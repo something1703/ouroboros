@@ -1,5 +1,9 @@
 """ClearFanOut — ADK_AGENTS.md §2.2: runs the four specialists concurrently, each
-reading its own batch from `triage.batches.*`."""
+sweeping its own category directly via `list_claims(status="triaged", category=...)`
+(docs/DECISIONS.md) rather than reading `triage.batches` from session state — found
+live that the model didn't reliably execute ClaimTriage's own "also sweep leftover
+triaged claims" step across every run, the same class of session-state hand-off
+fragility RiskAssessor/Reporter were already fixed for (#074/#075)."""
 
 from __future__ import annotations
 

@@ -47,6 +47,19 @@ class Project(BaseModel):
     created_at: datetime
 
 
+class Segment(BaseModel):
+    """One transcript segment of a cut asset, absolute video time (already re-based past
+    any per-chunk offset — see `packages/gemini_client/video.py`). Persisted so
+    FactAgent can read a ±20s context window around a claim without re-running video
+    understanding, and so `dashboard_api` can serve `GET /assets/{id}/segments`
+    (PHASE_06.md §6.1, §6.4)."""
+
+    t_start_ms: int
+    t_end_ms: int
+    speaker: str | None = None
+    transcript: str
+
+
 class Asset(BaseModel):
     """A single uploaded script or cut. See DATA_MODEL.md §3 `assets` table."""
 
@@ -57,6 +70,9 @@ class Asset(BaseModel):
     language: str | None = None
     page_count: int | None = None
     duration_ms: int | None = None
+    segments: list[Segment] = Field(default_factory=list)
+    proxy_uri: str | None = None  # low-res proxy MP4, gs://..., PHASE_06.md §6.4
+    poster_uri: str | None = None  # poster frame JPEG, gs://..., PHASE_06.md §6.4
     ingested_at: datetime | None = None
 
     @staticmethod

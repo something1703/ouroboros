@@ -1,5 +1,11 @@
 """Reporter — ADK_AGENTS.md §2.4. LlmAgent: per-claim summaries, Monitor creation,
-project summary refresh."""
+project summary refresh.
+
+Shared verbatim by TRUE CUT (ADK_AGENTS.md §3: "same classes with kind=factual
+behaviour switches in their prompts") — the prompt itself is kind-aware (see
+prompts/reporter.md), no Python fork needed. ADK gives every agent instance at most one
+`parent_agent`, so CLEAR and TRUECUT each need their own instance;
+`build_reporter_agent()` is the one construction path both pipelines call."""
 
 from __future__ import annotations
 
@@ -81,30 +87,36 @@ def _finalize_report(*, callback_context: CallbackContext) -> None:
 
 def _instruction(ctx: ReadonlyContext) -> str:
     base_url = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8080")
+    jurisdictions = ctx.state.get("jurisdictions", [])
     return render(
         "reporter",
         project_id=ctx.state.get("project_id", ""),
         studio_id=ctx.state.get("studio_id", ""),
         webhook_url=f"{base_url}/webhooks/parallel/monitor",
         monitor_frequency=frequency_for(_days_to_release(ctx.state.get("release_date"))),
+        primary_territory=jurisdictions[0] if jurisdictions else "",
     )
 
 
-reporter_agent = LlmAgent(
-    name="Reporter",
-    model=resilient_model("gemini-3.1-pro-preview"),
-    instruction=_instruction,
-    tools=[
-        ledger.list_claims,
-        gather_report_inputs,
-        write_claim_summary,
-        monitor_create_snapshot,
-        monitor_create_stream,
-        write_project_summary,
-    ],
-    generate_content_config=types.GenerateContentConfig(temperature=0.3),
-    output_schema=ReporterOutput,
-    output_key="report",
-    after_tool_callback=_record_monitor_and_count,
-    after_agent_callback=_finalize_report,
-)
+def build_reporter_agent() -> LlmAgent:
+    return LlmAgent(
+        name="Reporter",
+        model=resilient_model("gemini-3.1-pro-preview"),
+        instruction=_instruction,
+        tools=[
+            ledger.list_claims,
+            gather_report_inputs,
+            write_claim_summary,
+            monitor_create_snapshot,
+            monitor_create_stream,
+            write_project_summary,
+        ],
+        generate_content_config=types.GenerateContentConfig(temperature=0.3),
+        output_schema=ReporterOutput,
+        output_key="report",
+        after_tool_callback=_record_monitor_and_count,
+        after_agent_callback=_finalize_report,
+    )
+
+
+reporter_agent = build_reporter_agent()

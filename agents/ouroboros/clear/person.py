@@ -10,6 +10,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from agents.ouroboros.clear.schemas import SpecialistOutput
 from agents.ouroboros.clear.specialist import verify_batch
 from agents.ouroboros.prompts.render import render
+from agents.ouroboros.tools import ledger
 from agents.ouroboros.tools.resilience import resilient_model
 from packages.parallel_client.entity import search as entity_search
 
@@ -52,7 +53,7 @@ def _instruction(ctx: ReadonlyContext) -> str:
             "them or their estate, and right-of-publicity rules in {jurisdictions}."
         ),
         tool_name="verify_person_batch",
-        batch_key="person",
+        categories=["person"],
         project_id=ctx.state.get("project_id", ""),
         studio_id=ctx.state.get("studio_id", ""),
         jurisdictions=", ".join(ctx.state.get("jurisdictions", [])),
@@ -63,7 +64,7 @@ person_agent = LlmAgent(
     name="PersonAgent",
     model=resilient_model("gemini-3.5-flash"),
     instruction=_instruction,
-    tools=[verify_person_batch],
+    tools=[ledger.list_claims, verify_person_batch],
     output_schema=SpecialistOutput,
     output_key="person_results",
 )

@@ -1,11 +1,10 @@
 """Gemini video understanding: rough cut -> factual (+ visual legal) Claim[]. See PHASE_03.md §3.3.
 
-Structurally complete but **not yet verified against a real video file** — no sample cut
-exists yet (docs/DECISIONS.md; the human said they'll provide one later). Mirrors
-documents.py's chunking/merge shape as closely as the two domains allow; ffmpeg-based
-chunking in particular needs a real multi-chunk video to exercise. Treat any change here
-as needing a fresh live pass against `fixtures/cuts/sample.mp4` once it exists, per
-PHASE_03.md §3.3's acceptance criteria.
+Verified live against a real video (docs/DECISIONS.md #077) — a public-domain 1935
+short (`fixtures/cuts/sample.mp4`, not committed; see the same entry). Single-chunk
+only so far: that fixture is under `MAX_VIDEO_MINUTES_PER_CHUNK`, so the ffmpeg-based
+multi-chunk path (`_split_chunks`/segment and claim rebasing) is still exercised only by
+unit tests, not a real multi-chunk video.
 """
 
 from __future__ import annotations
@@ -26,12 +25,15 @@ from config.models import (
     EXTRACTION_SAFETY_SETTINGS,
     EXTRACTION_TEMPERATURE,
     MAX_VIDEO_MINUTES_PER_CHUNK,
+    POSTER_FRAME_OFFSET_SECONDS,
+    PROXY_MAX_HEIGHT_PX,
+    PROXY_VIDEO_BITRATE,
     VIDEO_CHUNK_OVERLAP_SECONDS,
 )
 from packages.claims.enums import ClaimCategory, ClaimKind
-from packages.claims.models import Claim, Project, SourceRef
+from packages.claims.models import Claim, Project, Segment, SourceRef
 from packages.common.logging import get_logger
-from packages.gemini_client.schemas import CutExtraction, ExtractedCutClaim
+from packages.gemini_client.schemas import CutExtraction, ExtractedCutClaim, TranscriptSegment
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "cut_extraction.md"
 _LEGAL_VISUAL_CATEGORIES = {"brand", "person", "artwork"}
@@ -40,7 +42,10 @@ _LEGAL_VISUAL_CATEGORIES = {"brand", "person", "artwork"}
 @dataclass(frozen=True)
 class CutExtractionResult:
     claims: list[Claim]
+    segments: list[Segment]
     duration_ms: int
+    proxy_uri: str | None = None
+    poster_uri: str | None = None
 
 
 log = get_logger(__name__)
@@ -140,11 +145,36 @@ def _extract_from_uri(gcs_uri: str, *, mime_type: str) -> CutExtraction:
     return parsed if isinstance(parsed, CutExtraction) else CutExtraction.model_validate(parsed)
 
 
-def _rebase(claims: list[ExtractedCutClaim], *, offset_ms: int) -> list[ExtractedCutClaim]:
+def _rebase_claims(claims: list[ExtractedCutClaim], *, offset_ms: int) -> list[ExtractedCutClaim]:
     for claim in claims:
         claim.t_start_ms += offset_ms
         claim.t_end_ms += offset_ms
     return claims
+
+
+def _rebase_segments(
+    segments: list[TranscriptSegment], *, offset_ms: int
+) -> list[TranscriptSegment]:
+    for segment in segments:
+        segment.t_start_ms += offset_ms
+        segment.t_end_ms += offset_ms
+    return segments
+
+
+def _to_domain_segments(segments: list[TranscriptSegment]) -> list[Segment]:
+    # Overlapping chunks (PHASE_03.md §3.3) re-observe the same few seconds of video
+    # twice; unlike claims (deduped by claim_id), segments have no natural identity to
+    # dedupe on, so a straight sort by start time can show one moment's transcript
+    # twice near a chunk boundary. Accepted as-is: FactAgent's ±20s window tolerates a
+    # duplicated sentence far better than a gap would, and true multi-chunk cuts (>45
+    # min) aren't exercised by any fixture yet to tune this further.
+    ordered = sorted(segments, key=lambda s: s.t_start_ms)
+    return [
+        Segment(
+            t_start_ms=s.t_start_ms, t_end_ms=s.t_end_ms, speaker=s.speaker, transcript=s.transcript
+        )
+        for s in ordered
+    ]
 
 
 def _to_domain_claims(
@@ -177,6 +207,69 @@ def _to_domain_claims(
     return list(by_id.values())
 
 
+def _generate_proxy_and_poster(
+    local_path: Path, *, tmp_dir: Path, asset_id: str
+) -> tuple[str | None, str | None]:
+    """ffmpeg-generates a low-res proxy MP4 + a poster JPEG from the already-downloaded
+    source video and uploads both to `ARTIFACTS_BUCKET` (PHASE_06.md §6.4) — reuses the
+    same local download `extract_cut_claims` already made, no second fetch. Returns
+    `(None, None)` if `ARTIFACTS_BUCKET` isn't configured or ffmpeg fails: a UI nicety
+    must never fail the whole ingest run."""
+    artifacts_bucket_name = os.environ.get("ARTIFACTS_BUCKET")
+    if not artifacts_bucket_name:
+        log.warning("proxy_skipped_no_artifacts_bucket", asset_id=asset_id)
+        return None, None
+
+    proxy_path = tmp_dir / f"{local_path.stem}.proxy.mp4"
+    poster_path = tmp_dir / f"{local_path.stem}.poster.jpg"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(local_path),
+                "-vf",
+                f"scale=-2:{PROXY_MAX_HEIGHT_PX}",
+                "-b:v",
+                PROXY_VIDEO_BITRATE,
+                "-an",
+                str(proxy_path),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(POSTER_FRAME_OFFSET_SECONDS),
+                "-i",
+                str(local_path),
+                "-frames:v",
+                "1",
+                str(poster_path),
+            ],
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode(errors="replace")[:500] if exc.stderr else ""
+        log.warning("proxy_generation_failed", asset_id=asset_id, stderr=stderr)
+        return None, None
+
+    artifacts_bucket = storage.Client().bucket(artifacts_bucket_name)
+    proxy_blob_name = f"proxies/{asset_id}.mp4"
+    poster_blob_name = f"posters/{asset_id}.jpg"
+    artifacts_bucket.blob(proxy_blob_name).upload_from_filename(str(proxy_path))
+    artifacts_bucket.blob(poster_blob_name).upload_from_filename(str(poster_path))
+    return (
+        f"gs://{artifacts_bucket_name}/{proxy_blob_name}",
+        f"gs://{artifacts_bucket_name}/{poster_blob_name}",
+    )
+
+
 def extract_cut_claims(gcs_uri: str, *, asset_id: str, project: Project) -> CutExtractionResult:
     """Extract every factual (+ visual legal) claim from the rough cut at `gcs_uri`, plus
     its duration in ms (services/ingest writes this to the `assets` row — PHASE_03.md §3.5)."""
@@ -193,11 +286,17 @@ def extract_cut_claims(gcs_uri: str, *, asset_id: str, project: Project) -> CutE
         duration_seconds = _video_duration_seconds(local_path)
         max_chunk_seconds = MAX_VIDEO_MINUTES_PER_CHUNK * 60
 
+        proxy_uri, poster_uri = _generate_proxy_and_poster(
+            local_path, tmp_dir=Path(tmp_dir), asset_id=asset_id
+        )
+
         if duration_seconds <= max_chunk_seconds:
             extraction = _extract_from_uri(gcs_uri, mime_type=mime_type)
             all_claims = list(extraction.claims)
+            all_segments = list(extraction.segments)
         else:
             all_claims = []
+            all_segments = []
             chunks = _split_chunks(
                 local_path,
                 chunk_seconds=max_chunk_seconds,
@@ -210,9 +309,18 @@ def extract_cut_claims(gcs_uri: str, *, asset_id: str, project: Project) -> CutE
                 try:
                     chunk_uri = f"gs://{bucket_name}/{chunk_blob_name}"
                     extraction = _extract_from_uri(chunk_uri, mime_type=mime_type)
-                    all_claims.extend(_rebase(extraction.claims, offset_ms=offset_seconds * 1000))
+                    offset_ms = offset_seconds * 1000
+                    all_claims.extend(_rebase_claims(extraction.claims, offset_ms=offset_ms))
+                    all_segments.extend(_rebase_segments(extraction.segments, offset_ms=offset_ms))
                 finally:
                     chunk_blob.delete()
 
     claims = _to_domain_claims(all_claims, asset_id=asset_id, project=project)
-    return CutExtractionResult(claims=claims, duration_ms=int(duration_seconds * 1000))
+    segments = _to_domain_segments(all_segments)
+    return CutExtractionResult(
+        claims=claims,
+        segments=segments,
+        duration_ms=int(duration_seconds * 1000),
+        proxy_uri=proxy_uri,
+        poster_uri=poster_uri,
+    )

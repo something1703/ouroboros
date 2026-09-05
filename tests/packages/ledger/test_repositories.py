@@ -165,10 +165,22 @@ def test_record_evidence_and_status_rolls_back_on_failure(db_session: Session) -
 def test_claims_project_status_index_exists_and_is_usable(db_session: Session) -> None:
     """A tiny table's planner picks a seq scan regardless of indexes, so this forces the
     planner's hand (SET enable_seqscan=off) to prove the index is real and queryable,
-    rather than just asserting an index *exists* in the catalog."""
+    rather than just asserting an index *exists* in the catalog. A single-row table
+    also leaves `ix_claims_project_status` and `ix_claims_project_category` tied on
+    cost (both can satisfy the `project_id` half of the predicate with nothing left to
+    tell them apart) -- found live, flaky in CI: the planner picked the *category*
+    index and rechecked `status` as a plain Filter instead. A second row sharing
+    `project_id` but a different `status` gives the status index a genuine, real
+    selectivity edge (it narrows via its own index condition; the category index
+    can't, since `category` isn't part of this query at all), making the choice
+    deterministic rather than an arbitrary tie-break."""
     project = _project()
     ProjectRepo.upsert(db_session, project)
     ClaimRepo.upsert(db_session, _claim())
+    other = _claim().model_copy(
+        update={"claim_id": "other-claim-id", "status": VerificationStatus.VERIFIED}
+    )
+    ClaimRepo.upsert(db_session, other)
     db_session.commit()
 
     db_session.execute(text("SET LOCAL enable_seqscan = off"))

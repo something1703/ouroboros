@@ -1,8 +1,8 @@
-# Local dev stack. `postgres` and `toolbox` are real today — the rest of this
-# file is genuinely runnable, but the services it builds don't exist as
-# application code yet. Uncomment each block as its phase lands (Phase 3
-# ingest, Phase 3/5/8 dashboard_api, Phase 8 web) rather than leaving a
-# `docker compose up` that fails on a missing Dockerfile. See docs/DEV.md.
+# Local dev stack. Only `postgres` is real today — everything else here is
+# genuinely runnable, but the services it builds don't exist as application
+# code yet. Uncomment each block as its phase lands (Phase 2.3 toolbox,
+# Phase 3 ingest, Phase 3/5/8 dashboard_api, Phase 8 web) rather than leaving
+# a `docker compose up` that fails on a missing Dockerfile. See docs/DEV.md.
 
 name: ouroboros
 
@@ -23,21 +23,22 @@ services:
       timeout: 5s
       retries: 10
 
-  toolbox:
-    build:
-      context: .
-      dockerfile: services/toolbox/Dockerfile
-    environment:
-      TOOLBOX_DB_HOST: postgres
-      TOOLBOX_DB_PORT: "5432"
-      TOOLBOX_DB_NAME: ouroboros
-      TOOLBOX_DB_USER: app
-      TOOLBOX_DB_PASSWORD: localdev # pragma: allowlist secret — local-only placeholder
-    ports:
-      - "5001:5000" # host 5000 is often taken by macOS AirPlay Receiver
-    depends_on:
-      postgres:
-        condition: service_healthy
+  # toolbox:
+  #   image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
+  #   command: ["--tools-file=/config/tools.yaml", "--address=0.0.0.0", "--port=5000"]
+  #   volumes:
+  #     - ./services/toolbox/tools.yaml:/config/tools.yaml:ro
+  #   environment:
+  #     OUROBOROS_ENV: local
+  #     DB_HOST: postgres
+  #     DB_NAME: ouroboros
+  #     DB_USER: app
+  #     DB_PASSWORD: localdev  # pragma: allowlist secret
+  #   ports:
+  #     - "5000:5000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
 
   # ingest:
   #   build: { context: ., dockerfile: services/ingest/Dockerfile }

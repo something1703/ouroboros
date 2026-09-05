@@ -6,7 +6,6 @@ without an LLM in the loop. See `PARALLEL_INTEGRATION.md` for the full contract.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final, Literal
 
@@ -144,15 +143,6 @@ def frequency_for(days_to_release: int) -> MonitorFrequency:
     if days_to_release > 7:
         return "1d"
     return "1h"
-
-
-def days_to_release(release_date: date | None) -> int:
-    """Shared by `Reporter` (new Monitors, agents/ouroboros/clear/reporter.py) and
-    `dashboard_api`'s coil-tightening job (existing Monitors, PHASE_07.md §7.3) so both
-    compute the exact same cadence for the exact same project."""
-    if release_date is None:
-        return 999  # unknown release date -> treat as far off, least-aggressive cadence
-    return max((release_date - datetime.now(UTC).date()).days, 0)
 
 
 # --- Cost --------------------------------------------------------------------

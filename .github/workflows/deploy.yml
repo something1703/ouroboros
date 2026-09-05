@@ -11,138 +11,10 @@ permissions:
 env:
   GOOGLE_CLOUD_PROJECT: ouroboros-507503
   OUROBOROS_REGION: us-central1
-  # Stable since Phase 1/2 — not re-read from `terraform output` here because
-  # deploy-services runs *before* terraform-apply (see below).
-  DB_HOST: 10.175.0.3
-  VPC_CONNECTOR: ouroboros-dev-conn
-  INTAKE_BUCKET: ouroboros-507503-intake-dev
-  ARTIFACTS_BUCKET: ouroboros-507503-artifacts-dev
 
 jobs:
-  # Runs *before* terraform-apply: an Eventarc trigger's `destination.cloud_run_service`
-  # (infra/modules/eventarc) and any `google_cloud_run_v2_service_iam_member` binding on
-  # a service both fail if that Cloud Run service doesn't exist yet — found live
-  # deploying `ingest` for the first time (docs/DECISIONS.md). Every service account,
-  # secret, and network path a service needs already exists from an earlier phase's
-  # apply, so deploying here first and reconciling infra second is safe.
-  deploy-services:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: auth
-        name: Authenticate to Google Cloud (Workload Identity Federation)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/492372502792/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: sa-ci-deploy@ouroboros-507503.iam.gserviceaccount.com
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Build + deploy toolbox
-        run: |
-          gcloud builds submit --config=services/toolbox/cloudbuild.yaml .
-          gcloud run deploy toolbox --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/toolbox:latest" \
-            --service-account="sa-toolbox@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="TOOLBOX_DB_HOST=${DB_HOST},TOOLBOX_DB_PORT=5432,TOOLBOX_DB_NAME=ouroboros,TOOLBOX_DB_USER=app" \
-            --set-secrets="TOOLBOX_DB_PASSWORD=DB_PASSWORD:latest" \
-            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
-            --vpc-egress=private-ranges-only --ingress=all --port=5000
-          # ingress=all, not internal (docs/DECISIONS.md #052): every real caller here --
-          # services/toolbox_public, Agent Engine, CI's own deploy step -- reaches toolbox
-          # over its public HTTPS URL without a VPC connector, which ingress=internal
-          # silently 404s at Cloud Run's edge regardless of a valid IAM identity. IAM
-          # (--no-allow-unauthenticated + per-caller run.invoker) is the only real gate.
-
-      - name: Build + deploy ingest
-        run: |
-          gcloud builds submit --config=services/ingest/cloudbuild.yaml .
-          gcloud run deploy ingest --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/ingest:latest" \
-            --service-account="sa-ingest@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET}" \
-            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
-            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
-            --vpc-egress=private-ranges-only --ingress=internal \
-            --memory=2Gi --cpu=2 --timeout=600
-          # --memory=2Gi --cpu=2 --timeout=600, not Cloud Run's 512Mi/300s defaults
-          # (docs/DECISIONS.md): found live, PHASE_06.md §6.4's ffmpeg proxy/poster
-          # generation (a full video transcode on top of the existing Gemini call)
-          # OOM'd and hit the request timeout on every real attempt, causing Eventarc
-          # to retry the same delivery indefinitely without ever completing.
-
-      - name: Build + deploy dashboard-api
-        run: |
-          gcloud builds submit --config=services/dashboard_api/cloudbuild.yaml .
-          gcloud run deploy dashboard-api --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/dashboard-api:latest" \
-            --service-account="sa-dashboard-api@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST}" \
-            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
-            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
-            --vpc-egress=private-ranges-only --memory=1Gi \
-            --no-cpu-throttling --min-instances=1
-          # --memory=1Gi, not Cloud Run's 512Mi default (docs/DECISIONS.md): found live,
-          # the vertexai/google-adk import surface services/dashboard_api/runs.py pulls
-          # in to call Agent Engine pushed a real request over 512Mi
-          # ("Memory limit of 512 MiB exceeded with 514 MiB used").
-          # --no-cpu-throttling --min-instances=1 (docs/DECISIONS.md #064): runs.py's
-          # /runs and /internal/runs/auto handlers return immediately and drive the
-          # real multi-minute CLEAR pass in a detached asyncio task, so the triggering
-          # request completes almost instantly -- Cloud Run's default CPU throttling +
-          # scale-to-zero then starves or kills that background task once no request is
-          # in flight. Found live: a real 56-claim run's background task went silent
-          # minutes in, and the next ping to dashboard-api hit a fresh cold start,
-          # proving the whole container (and the task with it) had been recycled.
-        env:
-          # Phase 5.5: dashboard-api's own /projects/{id}/runs and /internal/runs/auto
-          # endpoints call the deployed Agent Engine directly. AGENT_ENGINE_RESOURCE_NAME
-          # is empty on a repo's very first deploy (before any engine exists) -- that's
-          # fine, gcloud accepts an empty --set-env-vars value and
-          # services/dashboard_api/runs.py only reads it lazily, on the first real
-          # POST /runs call, not at container startup.
-          AGENT_ENGINE_RESOURCE_NAME: ${{ vars.AGENT_ENGINE_RESOURCE_NAME }}
-          AUTO_RUN_AFTER_INGEST: ${{ vars.AUTO_RUN_AFTER_INGEST || 'false' }}
-
-      - name: Build + deploy toolbox-public
-        run: |
-          gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml .
-          TOOLBOX_URL="$(gcloud run services describe toolbox --region="$OUROBOROS_REGION" --format='value(status.url)')"
-          gcloud run deploy toolbox-public --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/toolbox-public:latest" \
-            --service-account="sa-toolbox-public@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},TOOLBOX_BACKEND_URL=${TOOLBOX_URL}" \
-            --allow-unauthenticated
-
-      - name: Build + deploy webhook-receiver
-        run: |
-          gcloud builds submit --config=services/webhook_receiver/cloudbuild.yaml .
-          gcloud run deploy webhook-receiver --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/webhook-receiver:latest" \
-            --service-account="sa-webhook@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}" \
-            --allow-unauthenticated
-          # Public ingress (PHASE_07.md §7.1): Parallel's own webhook delivery calls
-          # this URL directly over the internet, with no GCP identity of its own to
-          # authenticate as — signature verification (packages/parallel_client/
-          # webhooks.py) is the real access control here, matching how a public
-          # webhook endpoint is normally secured.
-
-      - name: Build + deploy reverify-worker
-        run: |
-          gcloud builds submit --config=services/reverify_worker/cloudbuild.yaml .
-          gcloud run deploy reverify-worker --region="$OUROBOROS_REGION" \
-            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/reverify-worker:latest" \
-            --service-account="sa-reverify@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app" \
-            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
-            --no-allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
-            --vpc-egress=private-ranges-only
-
   terraform-apply:
     runs-on: ubuntu-latest
-    needs: deploy-services
     steps:
       - uses: actions/checkout@v4
 
@@ -165,42 +37,13 @@ jobs:
         working-directory: infra
         run: terraform apply -var-file=environments/dev.tfvars -auto-approve
 
-  # Runs after terraform-apply, not just deploy-services: sa-ci-deploy's roles/run.invoker
-  # binding on the private toolbox service (needed to construct root_agent locally, which
-  # loads live Toolbox tool schemas) is itself a terraform-managed resource.
-  deploy-agent-engine:
+  # TODO (Phase 3+): build each services/* image via Cloud Build and
+  # `gcloud run deploy`, once those services have real application code.
+  # TODO (Phase 5.5): invoke agents/deploy/deploy.py against Agent Engine,
+  # once the ADK app exists.
+  deploy-services:
     runs-on: ubuntu-latest
     needs: terraform-apply
     steps:
-      - uses: actions/checkout@v4
-
-      - id: auth
-        name: Authenticate to Google Cloud (Workload Identity Federation)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/492372502792/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: sa-ci-deploy@ouroboros-507503.iam.gserviceaccount.com
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-
-      - name: Sync dependencies
-        run: uv sync
-
-      - name: Resolve the private toolbox URL
-        # Constructing `root_agent` locally (to build/upload it) loads live Toolbox
-        # tool schemas, so it needs the real, private toolbox reachable here too — same
-        # requirement as any other ADK agent build, not specific to Agent Engine.
-        run: echo "TOOLBOX_MCP_URL=$(gcloud run services describe toolbox --region="$OUROBOROS_REGION" --format='value(status.url)')" >> "$GITHUB_ENV"
-
-      - name: Deploy / update Agent Engine
-        run: uv run python -m agents.deploy.deploy
-        env:
-          GOOGLE_CLOUD_LOCATION: global
-          GOOGLE_GENAI_USE_ENTERPRISE: "True"
-          ARTIFACTS_BUCKET: ouroboros-507503-artifacts-dev
-          AGENT_ENGINE_RESOURCE_NAME: ${{ vars.AGENT_ENGINE_RESOURCE_NAME }}
+      - name: placeholder
+        run: echo "TODO — no services have application code yet (Phase 3+)"

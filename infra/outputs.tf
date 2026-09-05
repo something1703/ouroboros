@@ -33,11 +33,3 @@ output "ci_workload_identity_provider" {
 output "ci_service_account_email" {
   value = module.iam.ci_service_account_email
 }
-
-output "cloud_sql_connection_name" {
-  value = module.cloud_sql.instance_connection_name
-}
-
-output "cloud_sql_private_ip" {
-  value = module.cloud_sql.private_ip_address
-}

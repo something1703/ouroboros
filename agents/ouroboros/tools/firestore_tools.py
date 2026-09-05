@@ -64,6 +64,7 @@ def write_claim_view(claim_id: str) -> dict[str, object]:
         evidence_summary=_claim_evidence_summary(claim),
         history_count=history_count,
         monitor_status=None,
+        prior_production_note=claim.get("prior_production_note"),
     )
     return {"claim_id": claim_id, "written": True}
 

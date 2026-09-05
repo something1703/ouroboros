@@ -1,5 +1,6 @@
 """ClaimTriage — ADK_AGENTS.md §2.1. LlmAgent: real judgment (priority rubric),
-real tool use (list_claims, get_prior_decisions, set_status), structured output.
+real tool use (list_claims, get_prior_decisions, set_status, memory_retrieve,
+note_prior_production_hit), structured output.
 
 Shared verbatim by TRUE CUT (ADK_AGENTS.md §3: "same classes with kind=factual
 behaviour switches in their prompts") — the prompt itself is kind-aware (see
@@ -15,6 +16,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from agents.ouroboros.clear.schemas import TriageOutput
 from agents.ouroboros.prompts.render import render
 from agents.ouroboros.tools import ledger
+from agents.ouroboros.tools.parallel_tools import memory_retrieve
 from agents.ouroboros.tools.resilience import resilient_model
 
 
@@ -34,7 +36,13 @@ def build_claim_triage_agent() -> LlmAgent:
         name="ClaimTriage",
         model=resilient_model("gemini-3.5-flash"),
         instruction=_instruction,
-        tools=[ledger.list_claims, ledger.get_prior_decisions, ledger.set_status],
+        tools=[
+            ledger.list_claims,
+            ledger.get_prior_decisions,
+            ledger.set_status,
+            memory_retrieve,
+            ledger.note_prior_production_hit,
+        ],
         output_schema=TriageOutput,
         output_key="triage",
     )

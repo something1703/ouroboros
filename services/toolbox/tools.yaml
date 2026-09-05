@@ -39,7 +39,7 @@ statement: |
   SELECT
     c.claim_id, c.project_id, c.studio_id, c.kind, c.category, c.entity_text,
     c.normalized_text, c.claim_text, c.language, c.source, c.jurisdictions,
-    c.priority, c.status, c.created_at, c.updated_at,
+    c.priority, c.status, c.prior_production_note, c.created_at, c.updated_at,
     e.evidence_id, e.cycle, e.method, e.parallel_run_id, e.output AS evidence_output,
     e.basis AS evidence_basis, e.overall_confidence, e.created_at AS evidence_created_at,
     r.level AS risk_level, r.score AS risk_score, r.rationale AS risk_rationale,
@@ -232,6 +232,25 @@ statement: |
   INSERT INTO verification_history (event_id, claim_id, at, actor, from_status, to_status, note, ref)
   SELECT $6, $1, now(), $3, old.status, $2, $4, $5::jsonb FROM old, updated
   RETURNING event_id;
+
+---
+kind: tool
+name: note_prior_production_hit
+type: postgres-sql
+source: ouroboros_pg
+description: >
+  Studio memory (PHASE_07.md §7.5): record that ClaimTriage found a Parallel Memory hit
+  for this claim's entity in a prior production, so the claim view can surface
+  "Seen in previous production."
+parameters:
+  - name: claim_id
+    type: string
+    description: The claim to annotate.
+  - name: note
+    type: string
+    description: Short human-readable note about the prior hit (what/where it was seen).
+statement: |
+  UPDATE claims SET prior_production_note = $2, updated_at = now() WHERE claim_id = $1;
 
 ---
 kind: tool
@@ -446,6 +465,7 @@ name: ledger_write
 tools:
   - record_evidence
   - set_status
+  - note_prior_production_hit
   - record_risk
   - record_monitor
   - record_cost

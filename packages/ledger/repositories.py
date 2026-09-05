@@ -178,6 +178,7 @@ def _claim_from_row(row: ClaimRow) -> Claim:
         jurisdictions=list(row.jurisdictions),
         priority=row.priority,
         status=row.status,
+        prior_production_note=row.prior_production_note,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

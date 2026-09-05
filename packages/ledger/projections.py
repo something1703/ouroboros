@@ -71,6 +71,7 @@ class Projector:
         evidence_summary: dict[str, object] | None,
         history_count: int,
         monitor_status: str | None,
+        prior_production_note: str | None = None,
     ) -> None:
         """Takes already-known primitives, not `Claim`/`Risk`/`Evidence` domain objects
         (docs/DECISIONS.md #067) — the only two callers either already have these values
@@ -98,6 +99,7 @@ class Projector:
             "monitor_status": monitor_status,
             "history_count": history_count,
             "updated_at": updated_at,
+            "prior_production_note": prior_production_note,
         }
         doc_ref.set(data, merge=True)
 

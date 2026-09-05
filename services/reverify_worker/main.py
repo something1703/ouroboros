@@ -299,6 +299,7 @@ def _handle_task_completion(event: TaskRunStatusEvent) -> None:
         evidence_summary=content,
         history_count=cycle,
         monitor_status="active",
+        prior_production_note=claim.prior_production_note,
     )
     _projector.project_summary(
         project_id,

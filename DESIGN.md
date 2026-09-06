@@ -7,7 +7,7 @@ colors:
   surface-card: "#1f1b17"
   surface-popover: "#262019"
   ember-orange: "#fb631b"
-  ember-orange-foreground: "#ffffff"
+  ember-orange-foreground: "#15120f"
   surface-hover: "#2c261e"
   alert-red: "#e5484d"
   hairline: "#332c24"
@@ -131,7 +131,7 @@ Corners are gently rounded throughout (`0.5rem` base radius, `--radius`), scaled
 
 ### Buttons
 - **Shape:** `0.5rem` radius, never pill-shaped except icon-only variants.
-- **Primary:** ember-orange fill, white text — reserved for the single most important action on a view (Run CLEAR).
+- **Primary:** ember-orange fill, near-black (`#15120f`) text — reserved for the single most important action on a view (Run CLEAR). Amended 2026-09-06: white text on this orange sits at 3.04:1, under WCAG AA's 4.5:1 floor (found live via Lighthouse); near-black text on the same orange is 6.13:1 — same brand color, a readable label.
 - **Secondary:** popover-charcoal fill, warm-bone text — a real but lower-emphasis action (Run TRUE CUT).
 - **Outline / Ghost:** near-black or transparent fill with a hairline border or hover-charcoal hover state — the default for anything that isn't the page's primary action (Trigger monitors, Sign out, Cancel).
 - **Hover / Focus:** buttons darken or lighten by roughly 20% opacity shift on hover; focus-visible gets a 3px ember-orange ring, never a browser-default blue outline.
@@ -155,6 +155,9 @@ Corners are gently rounded throughout (`0.5rem` base radius, `--radius`), scaled
 
 ### The Reality Drift Ring (signature component)
 A hand-drawn SVG arc, not a charting-library gauge — echoes the ouroboros mark's own nearly-closed circular stroke. Thick stroke (`26px` on a `220px` viewBox), hairline track underneath in the border color, ember-orange fill arc, IBM Plex Mono percentage at the center. Renders at hero scale (`14rem` diameter) as the page's one true-scale instrument, never shrunk into a small topbar widget.
+
+### The Coil Spiral (signature component, marketing site)
+Added 2026-09-06 for the public marketing site's landing/how-it-works pages. A single continuous SVG path (an Archimedean spiral, ember-orange stroke, always sampled at the same point count regardless of how many turns it draws) that visibly winds tighter to dramatize the product's real re-verification cadence — never a decorative loading spinner. Loose (~1 turn) at the hero; tightens as the visitor scrolls through the loop's stages; static at a fixed mid-tight setting (~2.5 turns) on the How It Works page. The same fixed-point-count technique is what lets the `d` attribute animate smoothly in CSS between turn counts.
 
 ## Do's and Don'ts
 

@@ -143,6 +143,18 @@ class FileUrlResponse(BaseModel):
     url: str
 
 
+class PublicShowcaseMetrics(BaseModel):
+    """A deliberately narrow, unauthenticated subset of `MetricsResponse` for the
+    public marketing site's "live proof" section (PRODUCT.md Principle 4: real data
+    over mocked). Scoped to one configured demo project only, and to only the fields
+    safe to show a stranger -- no spend, no claim counts, no project identity beyond
+    what `PUBLIC_SHOWCASE_PROJECT_ID` already names in this file."""
+
+    reality_drift: float | None
+    drift_7d: float | None
+    current_cadence: str
+
+
 class CreateProjectRequest(BaseModel):
     project_id: str
     studio_id: str
@@ -429,6 +441,26 @@ def get_metrics(project_id: str, _user: UserContext = Depends(get_current_user))
         counts_by_status=summary.get("counts_by_status") or {},
         counts_by_risk=summary.get("counts_by_risk") or {},
         days_to_release=days_left,
+        current_cadence=frequency_for(days_left),
+    )
+
+
+@app.get("/public/showcase-metrics", response_model=PublicShowcaseMetrics)
+def get_public_showcase_metrics() -> PublicShowcaseMetrics:
+    """No auth by design -- the marketing site (`web/`'s public routes) reads this to
+    show one real, live number instead of a fabricated one. Never add fields here
+    without checking they're safe for a stranger to see (see the model's own
+    docstring)."""
+    project_id = os.environ.get("PUBLIC_SHOWCASE_PROJECT_ID", "demo")
+    with session_scope() as session:
+        project = ProjectRepo.get(session, project_id)
+    if project is None:
+        return PublicShowcaseMetrics(reality_drift=None, drift_7d=None, current_cadence="1w")
+    summary = _projector.get_project_summary(project_id) or {}
+    days_left = days_to_release(project.release_date)
+    return PublicShowcaseMetrics(
+        reality_drift=summary.get("reality_drift"),
+        drift_7d=summary.get("drift_7d"),
         current_cadence=frequency_for(days_left),
     )
 

@@ -30,7 +30,7 @@ export function ProjectsPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {projects?.map((project) => (
-          <Link key={project.project_id} to={`/projects/${project.project_id}`}>
+          <Link key={project.project_id} to={`/app/projects/${project.project_id}`}>
             <Card className="transition-colors hover:border-primary">
               <CardHeader>
                 <CardTitle className="font-display text-lg">{project.title}</CardTitle>

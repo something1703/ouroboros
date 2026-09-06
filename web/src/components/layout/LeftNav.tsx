@@ -106,7 +106,7 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
           {projects?.map((project) => (
             <NavLink
               key={project.project_id}
-              to={`/projects/${project.project_id}`}
+              to={`/app/projects/${project.project_id}`}
               onClick={onNavigate}
               className={({ isActive }) =>
                 cn(
@@ -126,7 +126,7 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
               onDone={(projectId) => {
                 setCreating(false)
                 if (projectId) {
-                  navigate(`/projects/${projectId}`)
+                  navigate(`/app/projects/${projectId}`)
                   onNavigate?.()
                 }
               }}

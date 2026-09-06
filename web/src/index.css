@@ -63,9 +63,12 @@
   --card-foreground: #ede7dd;
   --popover: #262019;
   --popover-foreground: #ede7dd;
-  /* shadcn's own "primary" role carries the brand accent -- buttons, focus, active nav. */
+  /* shadcn's own "primary" role carries the brand accent -- buttons, focus, active nav.
+     Foreground is the near-black background color, not white: found live via
+     Lighthouse that white-on-orange sits at 3.04:1, under WCAG AA's 4.5:1 floor for
+     normal text; near-black-on-orange is 6.13:1. Same orange, just a readable label. */
   --primary: #fb631b;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #15120f;
   --secondary: #262019;
   --secondary-foreground: #ede7dd;
   --muted: #262019;
@@ -82,7 +85,7 @@
   --sidebar: #1a1613;
   --sidebar-foreground: #ede7dd;
   --sidebar-primary: #fb631b;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary-foreground: #15120f;
   --sidebar-accent: #262019;
   --sidebar-accent-foreground: #ede7dd;
   --sidebar-border: #332c24;
@@ -90,7 +93,7 @@
   /* Named brand tokens for anything that needs the accent directly, outside shadcn's
      own primary/secondary vocabulary (the "coil" cadence badge, the drift gauge). */
   --brand: #fb631b;
-  --brand-ink: #ffffff;
+  --brand-ink: #15120f;
 }
 
 @layer base {

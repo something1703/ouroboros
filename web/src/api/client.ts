@@ -12,6 +12,7 @@ import type {
   MetricsResponse,
   PlaybackResponse,
   Project,
+  PublicShowcaseMetrics,
   SegmentsResponse,
   StartRunRequest,
   StartRunResponse,
@@ -72,6 +73,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getMe(): Promise<UserContext> {
   return request("/me")
+}
+
+// No auth required -- the public marketing site's "live proof" section.
+export function getPublicShowcaseMetrics(): Promise<PublicShowcaseMetrics> {
+  return request("/public/showcase-metrics")
 }
 
 export function listProjects(): Promise<Project[]> {

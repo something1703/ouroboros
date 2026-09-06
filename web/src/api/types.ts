@@ -276,3 +276,9 @@ export interface PlaybackResponse {
 export interface FileUrlResponse {
   url: string
 }
+
+export interface PublicShowcaseMetrics {
+  reality_drift: number | null
+  drift_7d: number | null
+  current_cadence: Cadence
+}

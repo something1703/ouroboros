@@ -575,3 +575,26 @@ def test_asset_file_requires_auth(client: TestClient, db_session: Session) -> No
     _seed_project(db_session)
     _seed_asset(db_session)
     assert client.get("/assets/asset-1/file").status_code == 422
+
+
+def test_public_showcase_metrics_no_auth_needed(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session, project_id="demo")
+    response = client.get("/public/showcase-metrics")
+    assert response.status_code == 200
+    assert response.json() == {"reality_drift": None, "drift_7d": None, "current_cadence": "1w"}
+
+
+def test_public_showcase_metrics_missing_project_returns_defaults(client: TestClient) -> None:
+    response = client.get("/public/showcase-metrics")
+    assert response.status_code == 200
+    assert response.json() == {"reality_drift": None, "drift_7d": None, "current_cadence": "1w"}
+
+
+def test_public_showcase_metrics_uses_configured_project(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PUBLIC_SHOWCASE_PROJECT_ID", "other")
+    _seed_project(db_session, project_id="other")
+    response = client.get("/public/showcase-metrics")
+    assert response.status_code == 200
+    assert response.json()["current_cadence"] == "1w"

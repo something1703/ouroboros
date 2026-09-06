@@ -13,6 +13,12 @@ export interface Project {
   created_at: string // ISO datetime
 }
 
+export interface CreateProjectRequest {
+  project_id: string
+  studio_id: string
+  title: string
+}
+
 export type Role = "legal" | "editorial" | "producer"
 
 export interface UserContext {
@@ -69,4 +75,41 @@ export interface Asset {
   kind: "script" | "cut"
   gcs_uri: string
   ingested_at: string | null
+}
+
+export type ClaimKind = "legal" | "factual"
+
+export type ClaimCategory =
+  | "music"
+  | "brand"
+  | "person"
+  | "location"
+  | "artwork"
+  | "quote"
+  | "event"
+  | "statistic"
+  | "attribution"
+  | "archival"
+  | "identity"
+
+export type VerificationStatus =
+  | "pending"
+  | "triaged"
+  | "verifying"
+  | "verified"
+  | "escalated"
+  | "error"
+  | "stale"
+
+export type RiskLevel = "none" | "low" | "medium" | "high" | "blocking"
+
+export interface ClaimWithRisk {
+  claim_id: string
+  project_id: string
+  kind: ClaimKind
+  category: ClaimCategory
+  entity_text: string
+  claim_text: string
+  status: VerificationStatus
+  risk_level: RiskLevel | null
 }

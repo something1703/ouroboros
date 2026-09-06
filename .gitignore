@@ -29,6 +29,16 @@ web/tmp/
 # Leftover create-vite starter files, unused once App.tsx/index.css were rewritten
 # for Phase 8.2 (rm is blocked in this sandbox, so ignored rather than deleted)
 web/src/App.css
+web/src/App.tsx.orig_check
+
+# impeccable (design skill): machine-local consent + session-scoped cache with
+# absolute local paths -- .impeccable/config.json and surfaces/ are shared, tracked
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+# ...and its per-platform compiled binary -- a downloaded dependency artifact, not
+# source (12MB+, darwin-arm64-only); `npx impeccable install` re-fetches it per clone
+.claude/skills/impeccable/scripts/bin/
+.github/skills/impeccable/scripts/bin/
 web/src/assets/
 
 # Env / secrets

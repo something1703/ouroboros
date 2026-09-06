@@ -3,6 +3,8 @@
 // real deployed services" practice.
 import type {
   Asset,
+  ClaimWithRisk,
+  CreateProjectRequest,
   EventsFeedResponse,
   MetricsResponse,
   Project,
@@ -74,12 +76,20 @@ export function getProject(projectId: string): Promise<Project> {
   return request(`/projects/${projectId}`)
 }
 
+export function createProject(body: CreateProjectRequest): Promise<Project> {
+  return request("/projects", { method: "POST", body: JSON.stringify(body) })
+}
+
 export function getMetrics(projectId: string): Promise<MetricsResponse> {
   return request(`/projects/${projectId}/metrics`)
 }
 
 export function listAssets(projectId: string): Promise<Asset[]> {
   return request(`/projects/${projectId}/assets`)
+}
+
+export function listClaims(projectId: string): Promise<ClaimWithRisk[]> {
+  return request(`/projects/${projectId}/claims`)
 }
 
 export function getEvents(projectId: string, before?: string): Promise<EventsFeedResponse> {

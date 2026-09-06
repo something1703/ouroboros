@@ -75,6 +75,15 @@ _CUT_SUFFIXES = {"mp4", "mov"}
 _EVENTS_PAGE_LIMIT = 50
 
 
+class ClaimWithRisk(Claim):
+    """`Claim` plus its current risk level, for a project-wide worklist ranked by
+    risk (PHASE_08.md §8.2's "Needs attention" redesign) -- `Claim` alone has no risk
+    field (`Risk` is a separate per-claim row, DATA_MODEL.md §3), and this endpoint's
+    callers need it without an N+1 round trip per claim."""
+
+    risk_level: RiskLevel | None = None
+
+
 class UploadRequest(BaseModel):
     kind: Literal["script", "cut"]
     filename: str
@@ -203,7 +212,9 @@ def get_me(user: UserContext = Depends(get_current_user)) -> UserContext:
 
 
 @app.post("/projects/{project_id}/assets", response_model=UploadResponse)
-def create_upload_url(project_id: str, body: UploadRequest) -> UploadResponse:
+def create_upload_url(
+    project_id: str, body: UploadRequest, _user: UserContext = Depends(get_current_user)
+) -> UploadResponse:
     with session_scope() as session:
         ProjectRepo.require(session, project_id)
 
@@ -214,23 +225,34 @@ def create_upload_url(project_id: str, body: UploadRequest) -> UploadResponse:
 
 
 @app.get("/projects/{project_id}/assets", response_model=list[Asset])
-def list_assets(project_id: str) -> list[Asset]:
+def list_assets(project_id: str, _user: UserContext = Depends(get_current_user)) -> list[Asset]:
     with session_scope() as session:
         ProjectRepo.require(session, project_id)
         return AssetRepo.list_by_project(session, project_id)
 
 
-@app.get("/projects/{project_id}/claims", response_model=list[Claim])
+@app.get("/projects/{project_id}/claims", response_model=list[ClaimWithRisk])
 def list_claims(
     project_id: str,
     status: VerificationStatus | None = Query(default=None),
     category: ClaimCategory | None = Query(default=None),
-) -> list[Claim]:
+    _user: UserContext = Depends(get_current_user),
+) -> list[ClaimWithRisk]:
     with session_scope() as session:
         ProjectRepo.require(session, project_id)
-        return ClaimRepo.list_by_project(
+        claims = ClaimRepo.list_by_project(
             session, project_id, status=status, category=category.value if category else None
         )
+        risk_by_claim = {
+            claim_id: RiskLevel(level)
+            for claim_id, level, _assessed_at in RiskRepo.list_assessed_at_by_project(
+                session, project_id
+            )
+        }
+    return [
+        ClaimWithRisk(**claim.model_dump(), risk_level=risk_by_claim.get(claim.claim_id))
+        for claim in claims
+    ]
 
 
 @app.get("/projects", response_model=list[Project])
@@ -450,7 +472,9 @@ def _evidence_summary(evidence: Evidence | None) -> dict[str, object] | None:
 
 
 @app.get("/assets/{asset_id}/timeline", response_model=TimelineResponse)
-def get_asset_timeline(asset_id: str) -> TimelineResponse:
+def get_asset_timeline(
+    asset_id: str, _user: UserContext = Depends(get_current_user)
+) -> TimelineResponse:
     """PHASE_06.md §6.4: segments + every claim sourced from this asset, each with its
     latest verdict/risk/top citation so the UI can plot a scrubber without a second
     round trip per claim."""
@@ -470,7 +494,9 @@ def get_asset_timeline(asset_id: str) -> TimelineResponse:
 
 
 @app.get("/assets/{asset_id}/segments", response_model=SegmentsResponse)
-def get_asset_segments(asset_id: str) -> SegmentsResponse:
+def get_asset_segments(
+    asset_id: str, _user: UserContext = Depends(get_current_user)
+) -> SegmentsResponse:
     with session_scope() as session:
         asset = AssetRepo.get(session, asset_id)
         if asset is None:
@@ -479,7 +505,9 @@ def get_asset_segments(asset_id: str) -> SegmentsResponse:
 
 
 @app.get("/assets/{asset_id}/proxy", response_model=PlaybackResponse)
-def get_asset_proxy(asset_id: str) -> PlaybackResponse:
+def get_asset_proxy(
+    asset_id: str, _user: UserContext = Depends(get_current_user)
+) -> PlaybackResponse:
     """PHASE_06.md §6.4: signed GET URLs for the low-res proxy MP4 + poster frame
     ffmpeg generated at ingest. Both fields are null (not a 404) for a script asset, or
     a cut asset ingested before this feature existed / without ARTIFACTS_BUCKET set."""

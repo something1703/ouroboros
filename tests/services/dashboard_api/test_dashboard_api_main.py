@@ -105,6 +105,7 @@ def test_status(client: TestClient) -> None:
 
 def test_create_upload_url_for_script(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
     response = client.post(
         "/projects/demo/assets", json={"kind": "script", "filename": "final_draft.pdf"}
     )
@@ -116,6 +117,7 @@ def test_create_upload_url_for_script(client: TestClient, db_session: Session) -
 
 def test_create_upload_url_for_cut(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
     response = client.post("/projects/demo/assets", json={"kind": "cut", "filename": "reel.mp4"})
     assert response.status_code == 200
     assert response.json()["gcs_uri"] == "gs://test-intake-bucket/cuts/demo/reel.mp4"
@@ -123,11 +125,21 @@ def test_create_upload_url_for_cut(client: TestClient, db_session: Session) -> N
 
 def test_create_upload_url_rejects_wrong_extension(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
     response = client.post("/projects/demo/assets", json={"kind": "script", "filename": "reel.mp4"})
     assert response.status_code == 422
 
 
+def test_create_upload_url_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    response = client.post(
+        "/projects/demo/assets", json={"kind": "script", "filename": "final_draft.pdf"}
+    )
+    assert response.status_code == 422  # missing Authorization header
+
+
 def test_create_upload_url_unknown_project_404s(client: TestClient) -> None:
+    _as("iamrudra1703@gmail.com", "producer")
     response = client.post(
         "/projects/does-not-exist/assets", json={"kind": "script", "filename": "x.pdf"}
     )
@@ -135,13 +147,20 @@ def test_create_upload_url_unknown_project_404s(client: TestClient) -> None:
 
 
 def test_list_assets_unknown_project_404s(client: TestClient) -> None:
+    _as("iamrudra1703@gmail.com", "producer")
     response = client.get("/projects/does-not-exist/assets")
     assert response.status_code == 404
+
+
+def test_list_assets_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    assert client.get("/projects/demo/assets").status_code == 422
 
 
 def test_list_claims_returns_seeded_claim(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
     claim = _seed_claim(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
 
     response = client.get("/projects/demo/claims")
     assert response.status_code == 200
@@ -149,17 +168,55 @@ def test_list_claims_returns_seeded_claim(client: TestClient, db_session: Sessio
     assert len(body) == 1
     assert body[0]["claim_id"] == claim.claim_id
     assert body[0]["entity_text"] == "Coca-Cola"
+    assert body[0]["risk_level"] is None  # no Risk row seeded for this claim
+
+
+def test_list_claims_includes_risk_level(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    evidence = Evidence(
+        claim_id=claim.claim_id,
+        cycle=1,
+        method="search",
+        output={},
+        basis=[],
+        overall_confidence=Confidence.HIGH,
+        created_at=datetime.now(UTC),
+    )
+    EvidenceRepo.insert(db_session, evidence)
+    RiskRepo.upsert(
+        db_session,
+        Risk(
+            claim_id=claim.claim_id,
+            evidence_id=evidence.evidence_id,
+            level=RiskLevel.HIGH,
+            score=0.8,
+            rationale="initial assessment",
+            assessed_at=datetime.now(UTC),
+        ),
+    )
+    db_session.commit()
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get("/projects/demo/claims")
+    assert response.json()[0]["risk_level"] == "high"
 
 
 def test_list_claims_filters_by_category(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
     _seed_claim(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
 
     matching = client.get("/projects/demo/claims", params={"category": "brand"})
     assert len(matching.json()) == 1
 
     non_matching = client.get("/projects/demo/claims", params={"category": "music"})
     assert non_matching.json() == []
+
+
+def test_list_claims_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    assert client.get("/projects/demo/claims").status_code == 422
 
 
 def test_openapi_schema_renders(client: TestClient) -> None:

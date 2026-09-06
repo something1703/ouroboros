@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -10,10 +10,19 @@ import {
   triggerAllMonitors,
 } from "@/api/client"
 import { useAuth } from "@/auth/AuthProvider"
+import { ClaimDrawer } from "@/components/ClaimDrawer"
+import { FeedView } from "@/components/FeedView"
 import { DriftHero } from "@/components/layout/TopBar"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { VideoView } from "@/components/VideoView"
+
+// pdf.js is a large dependency (1MB+) -- code-split so it only loads for projects
+// where the Script tab is actually opened, not bundled into the main chunk.
+const ScriptView = lazy(() =>
+  import("@/components/ScriptView").then((m) => ({ default: m.ScriptView })),
+)
 import type { ClaimWithRisk, RiskLevel, RunMode } from "@/api/types"
 
 export function ProjectDetailPage() {
@@ -74,13 +83,15 @@ function useChangedClaims(claims: ClaimWithRisk[] | undefined): Set<string> {
 function ClaimRow({
   claim,
   staggerIndex,
+  onSelect,
 }: {
   claim: ClaimWithRisk
   staggerIndex: number | null
+  onSelect: (claimId: string) => void
 }) {
   return (
     <li
-      className="flex items-start gap-3 border-b border-border py-3 last:border-0"
+      className="border-b border-border last:border-0"
       style={
         staggerIndex != null
           ? {
@@ -92,19 +103,25 @@ function ClaimRow({
           : undefined
       }
     >
-      <span
-        className="mt-2 size-2 shrink-0 rounded-full"
-        style={{ backgroundColor: riskDotColor(claim.risk_level) }}
-        aria-hidden
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{claim.entity_text}</p>
-        <p className="truncate text-xs text-muted-foreground">{claim.claim_text}</p>
-      </div>
-      <span className="shrink-0 text-xs text-muted-foreground capitalize">
-        {riskLabel(claim.risk_level)}
-      </span>
-      <span className="shrink-0 text-xs text-muted-foreground capitalize">{claim.status}</span>
+      <button
+        type="button"
+        onClick={() => onSelect(claim.claim_id)}
+        className="flex w-full items-start gap-3 py-3 text-left transition-colors hover:bg-accent"
+      >
+        <span
+          className="mt-2 size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: riskDotColor(claim.risk_level) }}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{claim.entity_text}</p>
+          <p className="truncate text-xs text-muted-foreground">{claim.claim_text}</p>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground capitalize">
+          {riskLabel(claim.risk_level)}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground capitalize">{claim.status}</span>
+      </button>
     </li>
   )
 }
@@ -113,6 +130,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -151,6 +169,10 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const latestCut = useMemo(() => {
     const cuts = (assetsQuery.data ?? []).filter((a) => a.kind === "cut")
     return cuts.sort((a, b) => (b.ingested_at ?? "").localeCompare(a.ingested_at ?? ""))[0]
+  }, [assetsQuery.data])
+  const latestScript = useMemo(() => {
+    const scripts = (assetsQuery.data ?? []).filter((a) => a.kind === "script")
+    return scripts.sort((a, b) => (b.ingested_at ?? "").localeCompare(a.ingested_at ?? ""))[0]
   }, [assetsQuery.data])
 
   const canRun = user.role === "legal" || user.role === "editorial"
@@ -204,40 +226,63 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
       {metrics && <DriftHero title={project.title} metrics={metrics} />}
 
-      <div className="flex-1 space-y-6 p-6 pb-28">
-        <section>
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-medium text-foreground">Needs attention</h2>
-            <span className="text-xs text-muted-foreground">{rankedClaims.length} claims</span>
-          </div>
-          {claimsQuery.isLoading && <Skeleton className="h-32 w-full" />}
-          {!claimsQuery.isLoading && rankedClaims.length === 0 && (
-            <p className="text-sm text-muted-foreground">No claims ingested yet.</p>
-          )}
-          {rankedClaims.length > 0 && (
-            <ul>
-              {rankedClaims.map((claim) => (
-                <ClaimRow
-                  key={claim.claim_id}
-                  claim={claim}
-                  staggerIndex={staggerIndexByClaimId.get(claim.claim_id) ?? null}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
+      <Tabs defaultValue="overview" className="min-h-0 flex-1">
+        <TabsList className="mx-6 mt-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          {latestScript && <TabsTrigger value="script">Script</TabsTrigger>}
+          {latestCut && <TabsTrigger value="video">Video</TabsTrigger>}
+          <TabsTrigger value="feed">Feed</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Ouroboros feed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Live event feed — coming in Phase 8.3.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="overview" className="space-y-6 p-6 pb-28">
+          <section>
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-sm font-medium text-foreground">Needs attention</h2>
+              <span className="text-xs text-muted-foreground">{rankedClaims.length} claims</span>
+            </div>
+            {claimsQuery.isLoading && <Skeleton className="h-32 w-full" />}
+            {!claimsQuery.isLoading && rankedClaims.length === 0 && (
+              <p className="text-sm text-muted-foreground">No claims ingested yet.</p>
+            )}
+            {rankedClaims.length > 0 && (
+              <ul>
+                {rankedClaims.map((claim) => (
+                  <ClaimRow
+                    key={claim.claim_id}
+                    claim={claim}
+                    staggerIndex={staggerIndexByClaimId.get(claim.claim_id) ?? null}
+                    onSelect={setSelectedClaimId}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+
+        {latestScript && (
+          <TabsContent value="script" className="pb-28">
+            <Suspense fallback={<Skeleton className="m-6 h-96" />}>
+              <ScriptView assetId={latestScript.asset_id} onSelectClaim={setSelectedClaimId} />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {latestCut && (
+          <TabsContent value="video" className="pb-28">
+            <VideoView assetId={latestCut.asset_id} onSelectClaim={setSelectedClaimId} />
+          </TabsContent>
+        )}
+
+        <TabsContent value="feed" className="pb-28">
+          <FeedView projectId={projectId} onSelectClaim={setSelectedClaimId} />
+        </TabsContent>
+      </Tabs>
+
+      <ClaimDrawer
+        projectId={projectId}
+        claimId={selectedClaimId}
+        onClose={() => setSelectedClaimId(null)}
+      />
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-card px-6 py-4">
         {canRun ? (

@@ -577,6 +577,32 @@ class MonitorRepo:
         )
 
     @staticmethod
+    def get_by_claim(session: Session, claim_id: str) -> MonitorRecord | None:
+        """The claim drawer's "monitor status" line (PHASE_08.md §8.3). A claim can
+        accumulate more than one monitor row over its life (a cancelled one replaced
+        by a fresh one) with no unique constraint on `claim_id`, so this prefers an
+        active monitor and falls back to the most recently created row."""
+        row = session.execute(
+            select(MonitorRow)
+            .where(MonitorRow.claim_id == claim_id)
+            .order_by((MonitorRow.status == "active").desc(), MonitorRow.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        return MonitorRecord(
+            monitor_id=row.monitor_id,
+            claim_id=row.claim_id,
+            type=row.type,
+            task_run_id=row.task_run_id,
+            query=row.query,
+            frequency=row.frequency,
+            status=row.status,
+            last_event_at=row.last_event_at,
+            created_at=row.created_at,
+        )
+
+    @staticmethod
     def list_all_active(session: Session) -> list[tuple[MonitorRecord, str, date | None]]:
         """Every active monitor project-wide, with its project's own `project_id`/
         `release_date` — PHASE_07.md §7.3's coil-tightening job runs once daily across

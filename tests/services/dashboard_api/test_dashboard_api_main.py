@@ -15,8 +15,24 @@ from sqlalchemy.orm import Session
 
 import services.dashboard_api.main as dashboard_api
 from packages.claims.enums import ClaimCategory, ClaimKind, Confidence
-from packages.claims.models import Claim, Evidence, Project, Risk, RiskLevel, SourceRef
-from packages.ledger.repositories import ClaimRepo, EvidenceRepo, ProjectRepo, RiskRepo
+from packages.claims.models import (
+    Asset,
+    Claim,
+    Evidence,
+    MonitorRecord,
+    Project,
+    Risk,
+    RiskLevel,
+    SourceRef,
+)
+from packages.ledger.repositories import (
+    AssetRepo,
+    ClaimRepo,
+    EvidenceRepo,
+    MonitorRepo,
+    ProjectRepo,
+    RiskRepo,
+)
 from services.dashboard_api.auth import UserContext, get_current_user, require_internal_caller
 
 pytestmark = pytest.mark.usefixtures("engine")
@@ -29,6 +45,11 @@ def _stub_signing(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         dashboard_api,
         "_generate_upload_url",
         lambda bucket, name: f"https://storage.googleapis.com/{bucket}/{name}?signed=1",
+    )
+    monkeypatch.setattr(
+        dashboard_api,
+        "_generate_playback_url",
+        lambda gcs_uri: f"https://storage.googleapis.com/signed?src={gcs_uri}",
     )
     yield
 
@@ -95,6 +116,24 @@ def _seed_claim(db_session: Session, project_id: str = "demo") -> Claim:
     ClaimRepo.upsert(db_session, claim)
     db_session.commit()
     return claim
+
+
+def _seed_asset(
+    db_session: Session,
+    *,
+    asset_id: str = "asset-1",
+    kind: str = "script",
+    project_id: str = "demo",
+) -> Asset:
+    asset = Asset(
+        asset_id=asset_id,
+        project_id=project_id,
+        kind=kind,
+        gcs_uri=f"gs://test-intake-bucket/{kind}s/{project_id}/{asset_id}",
+    )
+    AssetRepo.upsert(db_session, asset)
+    db_session.commit()
+    return asset
 
 
 def test_status(client: TestClient) -> None:
@@ -275,6 +314,28 @@ def test_get_claim_detail(client: TestClient, db_session: Session) -> None:
     assert body["evidence_history"] == []
     assert body["risk"] is None
     assert body["history"] == []
+    assert body["monitor_status"] is None
+
+
+def test_get_claim_detail_includes_monitor_status(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)
+    MonitorRepo.upsert(
+        db_session,
+        MonitorRecord(
+            monitor_id="mon-1",
+            claim_id=claim.claim_id,
+            type="snapshot",
+            frequency="1w",
+            status="active",
+            created_at=datetime.now(UTC),
+        ),
+    )
+    db_session.commit()
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get(f"/projects/demo/claims/{claim.claim_id}")
+    assert response.json()["monitor_status"] == "active"
 
 
 def test_override_claim_status_as_legal(client: TestClient, db_session: Session) -> None:
@@ -436,3 +497,81 @@ def test_create_run_starts_a_run(
     response = client.post("/projects/demo/runs", json={"asset_id": "asset-1", "mode": "clear"})
     assert response.status_code == 200
     assert response.json() == {"run_id": "run-123"}
+
+
+def test_asset_timeline_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session)
+    assert client.get("/assets/asset-1/timeline").status_code == 422
+
+
+def test_asset_timeline_script_claim_sorts_by_page(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session, kind="script")
+    claim = _seed_claim(db_session)  # page=12, no t_start_ms -- a script-sourced claim
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get("/assets/asset-1/timeline")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["claims"][0]["claim_id"] == claim.claim_id
+    assert body["claims"][0]["page"] == 12
+    assert body["claims"][0]["t_start_ms"] is None
+
+
+def test_asset_timeline_unknown_asset_404s(client: TestClient) -> None:
+    _as("iamrudra1703@gmail.com", "producer")
+    assert client.get("/assets/does-not-exist/timeline").status_code == 404
+
+
+def test_asset_segments(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session, kind="cut")
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get("/assets/asset-1/segments")
+    assert response.status_code == 200
+    assert response.json() == {"asset_id": "asset-1", "segments": []}
+
+
+def test_asset_segments_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session)
+    assert client.get("/assets/asset-1/segments").status_code == 422
+
+
+def test_asset_proxy_null_when_not_generated(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session, kind="cut")
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get("/assets/asset-1/proxy")
+    assert response.status_code == 200
+    assert response.json() == {"proxy_url": None, "poster_url": None}
+
+
+def test_asset_proxy_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session)
+    assert client.get("/assets/asset-1/proxy").status_code == 422
+
+
+def test_asset_file_returns_signed_url(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    asset = _seed_asset(db_session, kind="script")
+    _as("iamrudra1703@gmail.com", "producer")
+
+    response = client.get("/assets/asset-1/file")
+    assert response.status_code == 200
+    assert response.json() == {"url": f"https://storage.googleapis.com/signed?src={asset.gcs_uri}"}
+
+
+def test_asset_file_unknown_asset_404s(client: TestClient) -> None:
+    _as("iamrudra1703@gmail.com", "producer")
+    assert client.get("/assets/does-not-exist/file").status_code == 404
+
+
+def test_asset_file_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    _seed_asset(db_session)
+    assert client.get("/assets/asset-1/file").status_code == 422

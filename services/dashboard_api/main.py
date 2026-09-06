@@ -112,6 +112,7 @@ class TimelineClaim(BaseModel):
     kind: str
     category: str
     claim_text: str
+    page: int | None
     t_start_ms: int | None
     t_end_ms: int | None
     channel: str | None
@@ -138,6 +139,10 @@ class PlaybackResponse(BaseModel):
     poster_url: str | None
 
 
+class FileUrlResponse(BaseModel):
+    url: str
+
+
 class CreateProjectRequest(BaseModel):
     project_id: str
     studio_id: str
@@ -156,6 +161,7 @@ class ClaimDetail(BaseModel):
     evidence_history: list[Evidence]
     risk: Risk | None
     history: list[VerificationEvent]
+    monitor_status: str | None
 
 
 class HumanOverrideRequest(BaseModel):
@@ -295,10 +301,12 @@ def get_claim_detail(
         claim = ClaimRepo.require(session, claim_id)
         if claim.project_id != project_id:
             raise NotFound("claim", claim_id)
+        monitor = MonitorRepo.get_by_claim(session, claim_id)
         return ClaimDetail(
             claim=claim,
             evidence_history=EvidenceRepo.history_for_claim(session, claim_id),
             risk=RiskRepo.get(session, claim_id),
+            monitor_status=monitor.status if monitor else None,
             history=HistoryRepo.for_claim(session, claim_id),
         )
 
@@ -367,6 +375,7 @@ def override_claim(
         evidence_history = EvidenceRepo.history_for_claim(session, claim_id)
         risk = RiskRepo.get(session, claim_id)
         history = HistoryRepo.for_claim(session, claim_id)
+        monitor = MonitorRepo.get_by_claim(session, claim_id)
 
     _projector.claim_view(
         project_id=project_id,
@@ -381,11 +390,15 @@ def override_claim(
         risk_score=risk.score if risk else None,
         evidence_summary=_evidence_summary(evidence_history[-1] if evidence_history else None),
         history_count=len(history),
-        monitor_status=None,
+        monitor_status=monitor.status if monitor else None,
         prior_production_note=updated_claim.prior_production_note,
     )
     return ClaimDetail(
-        claim=updated_claim, evidence_history=evidence_history, risk=risk, history=history
+        claim=updated_claim,
+        evidence_history=evidence_history,
+        risk=risk,
+        history=history,
+        monitor_status=monitor.status if monitor else None,
     )
 
 
@@ -484,7 +497,11 @@ def get_asset_timeline(
             raise NotFound("asset", asset_id)
         claims = ClaimRepo.list_by_asset(session, asset_id)
         timeline_claims = [_timeline_claim(session, claim) for claim in claims]
-    timeline_claims.sort(key=lambda c: (c.t_start_ms is None, c.t_start_ms or 0))
+    # Video (cut) claims sort by time; script claims have no t_start_ms and sort by
+    # page instead -- a mixed sort key so either asset kind lands in reading order.
+    timeline_claims.sort(
+        key=lambda c: (c.t_start_ms is None, c.t_start_ms or 0, c.page is None, c.page or 0)
+    )
     return TimelineResponse(
         asset_id=asset.asset_id,
         duration_ms=asset.duration_ms,
@@ -521,6 +538,21 @@ def get_asset_proxy(
     )
 
 
+@app.get("/assets/{asset_id}/file", response_model=FileUrlResponse)
+def get_asset_file(
+    asset_id: str, _user: UserContext = Depends(get_current_user)
+) -> FileUrlResponse:
+    """A signed GET URL for the asset's own originally-uploaded file (`gcs_uri`) --
+    PHASE_08.md §8.3's script view needs the actual PDF to render with pdf.js, and
+    unlike a cut's proxy/poster (transcoded, `get_asset_proxy`), a script asset has no
+    separate viewable artifact: the uploaded PDF *is* the thing to display."""
+    with session_scope() as session:
+        asset = AssetRepo.get(session, asset_id)
+        if asset is None:
+            raise NotFound("asset", asset_id)
+    return FileUrlResponse(url=_generate_playback_url(asset.gcs_uri))
+
+
 def _timeline_claim(session: Session, claim: Claim) -> TimelineClaim:
     evidence = EvidenceRepo.latest_for_claim(session, claim.claim_id)
     risk = RiskRepo.get(session, claim.claim_id)
@@ -538,6 +570,7 @@ def _timeline_claim(session: Session, claim: Claim) -> TimelineClaim:
         kind=claim.kind.value,
         category=claim.category.value,
         claim_text=claim.claim_text,
+        page=claim.source.page,
         t_start_ms=claim.source.t_start_ms,
         t_end_ms=claim.source.t_end_ms,
         channel=claim.source.channel,

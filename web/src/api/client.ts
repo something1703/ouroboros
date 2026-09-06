@@ -3,13 +3,19 @@
 // real deployed services" practice.
 import type {
   Asset,
+  ClaimDetail,
   ClaimWithRisk,
   CreateProjectRequest,
   EventsFeedResponse,
+  FileUrlResponse,
+  HumanOverrideRequest,
   MetricsResponse,
+  PlaybackResponse,
   Project,
+  SegmentsResponse,
   StartRunRequest,
   StartRunResponse,
+  TimelineResponse,
   TriggerAllResponse,
   UserContext,
 } from "./types"
@@ -90,6 +96,37 @@ export function listAssets(projectId: string): Promise<Asset[]> {
 
 export function listClaims(projectId: string): Promise<ClaimWithRisk[]> {
   return request(`/projects/${projectId}/claims`)
+}
+
+export function getClaimDetail(projectId: string, claimId: string): Promise<ClaimDetail> {
+  return request(`/projects/${projectId}/claims/${claimId}`)
+}
+
+export function overrideClaim(
+  projectId: string,
+  claimId: string,
+  body: HumanOverrideRequest,
+): Promise<ClaimDetail> {
+  return request(`/projects/${projectId}/claims/${claimId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export function getAssetTimeline(assetId: string): Promise<TimelineResponse> {
+  return request(`/assets/${assetId}/timeline`)
+}
+
+export function getAssetSegments(assetId: string): Promise<SegmentsResponse> {
+  return request(`/assets/${assetId}/segments`)
+}
+
+export function getAssetProxy(assetId: string): Promise<PlaybackResponse> {
+  return request(`/assets/${assetId}/proxy`)
+}
+
+export function getAssetFile(assetId: string): Promise<FileUrlResponse> {
+  return request(`/assets/${assetId}/file`)
 }
 
 export function getEvents(projectId: string, before?: string): Promise<EventsFeedResponse> {

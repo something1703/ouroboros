@@ -5,6 +5,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 
+from agents.ouroboros.ask.ask_ouroboros import ask_ouroboros_agent
 from agents.ouroboros.clear.pipeline import clear_agent
 from agents.ouroboros.prompts.render import render
 from agents.ouroboros.tools.resilience import resilient_model
@@ -21,5 +22,5 @@ root_agent = LlmAgent(
     model=resilient_model("gemini-3.5-flash"),
     instruction=_instruction,
     tools=[initialize_run],
-    sub_agents=[clear_agent, truecut_agent],
+    sub_agents=[clear_agent, truecut_agent, ask_ouroboros_agent],
 )

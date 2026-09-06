@@ -89,6 +89,9 @@ locals {
       # 56-claim CLEAR run failed every specialist claim with `403 Permission
       # 'modelarmor.templates.useToSanitizeUserPrompt' denied` until this was added.
       "roles/modelarmor.user",
+      # AskOuroboros searches the private-corpus Vertex AI Search engine at runtime
+      # (PHASE_08.md §8.4) -- read-only, never writes documents into it.
+      "roles/discoveryengine.viewer",
     ]
     sa-scheduler = [
       "roles/run.invoker",
@@ -161,6 +164,10 @@ locals {
       "roles/cloudsql.admin",
       "roles/eventarc.admin",
       "roles/modelarmor.admin",
+      # Phase 8.4 introduces Terraform's first `google_discovery_engine_data_store`/
+      # `_search_engine` resources (AskOuroboros's private corpus) -- same pattern as
+      # every role above: CI needs admin on any resource type infra/ manages.
+      "roles/discoveryengine.admin",
     ]
   }
 

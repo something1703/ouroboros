@@ -2,11 +2,14 @@
 // (VITE_API_BASE_URL) -- no mock layer, matching this project's own "verify against
 // real deployed services" practice.
 import type {
+  AskRequest,
+  AskResponse,
   Asset,
   ClaimDetail,
   ClaimWithRisk,
   CreateProjectRequest,
   EventsFeedResponse,
+  ExportResponse,
   FileUrlResponse,
   HumanOverrideRequest,
   MetricsResponse,
@@ -149,4 +152,23 @@ export function startRun(projectId: string, body: StartRunRequest): Promise<Star
 
 export function triggerAllMonitors(projectId: string): Promise<TriggerAllResponse> {
   return request(`/projects/${projectId}/monitors/trigger-all`, { method: "POST" })
+}
+
+export function askOuroboros(projectId: string, body: AskRequest): Promise<AskResponse> {
+  return request(`/projects/${projectId}/ask`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function exportEoPack(projectId: string): Promise<ExportResponse> {
+  return request(`/projects/${projectId}/exports/eo-pack`, { method: "POST" })
+}
+
+export function exportFactcheckReport(projectId: string): Promise<ExportResponse> {
+  return request(`/projects/${projectId}/exports/factcheck-report`, { method: "POST" })
+}
+
+export function exportClearanceSheet(projectId: string): Promise<ExportResponse> {
+  return request(`/projects/${projectId}/exports/clearance-sheet`, { method: "POST" })
 }

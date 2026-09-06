@@ -61,12 +61,21 @@ def _parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
 
 
 def _extract_from_uri(gcs_uri: str, *, page_offset: int = 0) -> list[ExtractedScriptClaim]:
+    # A single types.Content, not a bare list literal -- mypy --strict infers a list
+    # mixing a Part and a str as list[object], and list's own invariance means even an
+    # explicitly-annotated list[PartUnion] still can't match generate_content's
+    # declared (differently-membered) union type. Content is an exact, non-list member
+    # of that union, sidestepping the whole list-variance question.
+    contents = types.Content(
+        role="user",
+        parts=[
+            types.Part.from_uri(file_uri=gcs_uri, mime_type="application/pdf"),
+            types.Part.from_text(text=_prompt()),
+        ],
+    )
     response = _client().models.generate_content(
         model=EXTRACTION_MODEL,
-        contents=[
-            types.Part.from_uri(file_uri=gcs_uri, mime_type="application/pdf"),
-            _prompt(),
-        ],
+        contents=contents,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=ScriptExtraction,

@@ -1,0 +1,23 @@
+STUDIO FACT-CHECK PRECEDENT
+Production: "Static Orbit" (2024)
+Category: Historical Event / Date
+Claim: Dialogue states the Apollo 11 moon landing broadcast reached "over a
+billion viewers worldwide."
+
+Finding: DISPUTED — CORRECTED WORDING USED
+
+Contemporary 1969 audience-measurement methodology could not have produced a
+verified "over a billion" global figure — that number is a commonly repeated
+but unsourced exaggeration. Nielsen-era U.S. estimates plus international
+broadcast reach put a more defensible figure at approximately 600 million
+viewers worldwide, the number most historians and broadcast archives cite.
+
+Outcome: the line was revised from "over a billion viewers" to "hundreds of
+millions of viewers" before final mix, matching defensible historical
+figures rather than the popular but unverified round number.
+
+Signed off by: Fact-Check, 2024-03-08.
+Notes for future productions: "a billion viewers" is a recurring unverified
+claim about the Apollo 11 broadcast across multiple scripts — treat it as a
+known factual risk and verify against a real audience-measurement source
+before it reaches a locked cut, not just at script stage.

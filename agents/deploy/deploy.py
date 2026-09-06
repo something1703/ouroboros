@@ -68,6 +68,7 @@ _REQUIREMENTS = [
     "google-cloud-pubsub==2.39.2",
     "google-cloud-bigquery==3.44.0",
     "google-cloud-modelarmor==0.7.1",
+    "google-cloud-discoveryengine==0.20.3",
     "toolbox-core==1.4.0",
     "httpx==0.28.1",
     "structlog==26.1.0",

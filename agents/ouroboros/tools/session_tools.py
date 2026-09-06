@@ -14,10 +14,13 @@ from packages.common.ids import new_ulid
 from . import ledger
 
 
-def initialize_run(project_id: str, asset_id: str, tool_context: ToolContext) -> dict[str, object]:
+def initialize_run(
+    project_id: str, asset_id: str, tool_context: ToolContext, question: str = ""
+) -> dict[str, object]:
     """Look up the project and populate session state for this run
     (studio_id, jurisdictions, release_date, run_id). Must be called before
-    transferring to CLEAR, TRUECUT, or AskOuroboros."""
+    transferring to CLEAR, TRUECUT, or AskOuroboros. Pass the input's `question`
+    field when (and only when) mode is "ask"; leave it empty otherwise."""
     raw = ledger.get_project(project_id=project_id)
     project = json.loads(raw) if raw else None
     if not project:
@@ -30,6 +33,7 @@ def initialize_run(project_id: str, asset_id: str, tool_context: ToolContext) ->
     tool_context.state["jurisdictions"] = project.get("distribution_territories") or []
     tool_context.state["release_date"] = project.get("release_date")
     tool_context.state["run_id"] = run_id
+    tool_context.state["question"] = question
 
     return {
         "run_id": run_id,

@@ -480,7 +480,7 @@ def _adjust_risk_with_gemini(
         client = genai.Client(vertexai=True, project=os.environ.get("GOOGLE_CLOUD_PROJECT"))
         response = client.models.generate_content(
             model="gemini-3.5-flash",
-            contents=[prompt],
+            contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=_RiskAdjustment,

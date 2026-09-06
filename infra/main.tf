@@ -26,6 +26,10 @@ locals {
     "monitoring.googleapis.com",
     "cloudtrace.googleapis.com",
     "sheets.googleapis.com",
+    # PHASE_08.md §8.5: the clearance-log export shares its created Sheet link-
+    # accessible via the Drive API's permissions.create -- Sheets API alone manages
+    # the spreadsheet's cells, but setting who can open the file is a Drive API call.
+    "drive.googleapis.com",
     "vpcaccess.googleapis.com",
     "servicenetworking.googleapis.com",
   ]
@@ -101,6 +105,15 @@ module "model_armor" {
   source     = "./modules/model_armor"
   project_id = var.project_id
   region     = var.region
+
+  depends_on = [module.project_services]
+}
+
+# AskOuroboros's private corpus (PHASE_08.md §8.4) -- documents ingested separately via
+# scripts/ingest_private_corpus.py once the datastore exists.
+module "vertex_search" {
+  source     = "./modules/vertex_search"
+  project_id = var.project_id
 
   depends_on = [module.project_services]
 }

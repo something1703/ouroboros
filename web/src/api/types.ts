@@ -77,6 +77,19 @@ export interface TriggerAllResponse {
   errors: { monitor_id: string; error: string }[]
 }
 
+export interface AskRequest {
+  question: string
+  asset_id?: string
+}
+
+export interface AskResponse {
+  answer: string
+}
+
+export interface ExportResponse {
+  url: string
+}
+
 export interface Asset {
   asset_id: string
   project_id: string

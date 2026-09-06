@@ -108,6 +108,52 @@ def _drive_run_sync(project_id: str, asset_id: str, run_id: str, *, mode: str) -
             )
 
 
+def ask_question(project_id: str, asset_id: str, question: str) -> str:
+    """Synchronously asks AskOuroboros a question and returns its full text answer
+    (PHASE_08.md §8.4) -- citations and the "Evidence, not legal advice." guardrail
+    line are already inline, per agents/ouroboros/prompts/ask_ouroboros.md's own
+    output schema, so this returns plain text, not a structured citations list.
+
+    Unlike `start_run`, this blocks for the whole call and returns the answer
+    directly: there's no Firestore run doc to poll, and no advisory lock (concurrent
+    questions are read-only and don't race over shared claim writes the way
+    concurrent CLEAR/TRUECUT runs do)."""
+    engine = _engine()
+    adk_session = engine.create_session(user_id=project_id)  # type: ignore[attr-defined]
+    message = json.dumps(
+        {"project_id": project_id, "asset_id": asset_id, "mode": "ask", "question": question}
+    )
+    answer = ""
+    for event in engine.stream_query(  # type: ignore[attr-defined]
+        message=message, user_id=project_id, session_id=adk_session["id"]
+    ):
+        if event.get("partial"):
+            continue
+        parts = (event.get("content") or {}).get("parts") or []
+        text = "".join(part.get("text", "") for part in parts if part.get("text"))
+        if text:
+            answer = text
+
+    if not answer:
+        raise RuntimeError(
+            f"AskOuroboros produced no text answer for project {project_id} -- the "
+            "remote worker likely died before doing any work"
+        )
+
+    # OuroborosCoordinator's own output schema (coordinator.md) is a bare
+    # `{"error": "..."}` JSON object when it declines to transfer (unknown mode,
+    # initialize_run failure) -- it never produces any other output text itself, so
+    # this is the only case where `answer` is JSON rather than AskOuroboros's prose.
+    try:
+        parsed = json.loads(answer)
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+    if isinstance(parsed, dict) and "error" in parsed:
+        raise ValueError(str(parsed["error"]))
+
+    return answer
+
+
 def _stream_run(project_id: str, asset_id: str, run_id: str, *, mode: str) -> None:
     # create_session/stream_query aren't on AgentEngine's class -- they're attached to
     # the *instance* at __init__ from the deployed engine's own operation_schemas

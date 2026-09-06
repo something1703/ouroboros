@@ -34,6 +34,9 @@ dependencies = [
     "google-cloud-modelarmor>=0.7.1",
     "openai>=3.7.0",
     "google-auth",
+    "google-cloud-discoveryengine>=0.13.11",
+    "reportlab>=4.2",
+    "google-api-python-client>=2.150",
 ]
 
 [dependency-groups]
@@ -104,6 +107,8 @@ module = [
     "google.cloud.storage.*",
     "google.cloud.pubsub_v1",
     "google.cloud.pubsub_v1.*",
+    "reportlab.*",
+    "googleapiclient.*",
 ]
 ignore_missing_imports = true
 

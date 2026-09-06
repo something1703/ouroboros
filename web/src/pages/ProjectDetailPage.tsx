@@ -10,7 +10,9 @@ import {
   triggerAllMonitors,
 } from "@/api/client"
 import { useAuth } from "@/auth/AuthProvider"
+import { AskDrawer } from "@/components/AskDrawer"
 import { ClaimDrawer } from "@/components/ClaimDrawer"
+import { ExportsPanel } from "@/components/ExportsPanel"
 import { FeedView } from "@/components/FeedView"
 import { DriftHero } from "@/components/layout/TopBar"
 import { Button } from "@/components/ui/button"
@@ -131,6 +133,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient()
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
+  const [askOpen, setAskOpen] = useState(false)
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -235,6 +238,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 p-6 pb-28">
+          <ExportsPanel projectId={projectId} />
+
           <section>
             <div className="mb-2 flex items-baseline justify-between">
               <h2 className="text-sm font-medium text-foreground">Needs attention</h2>
@@ -284,7 +289,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         onClose={() => setSelectedClaimId(null)}
       />
 
+      <AskDrawer projectId={projectId} open={askOpen} onClose={() => setAskOpen(false)} />
+
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-card px-6 py-4">
+        <Button size="sm" variant="outline" onClick={() => setAskOpen(true)}>
+          Ask Ouroboros
+        </Button>
         {canRun ? (
           <>
             <Button

@@ -499,6 +499,99 @@ def test_create_run_starts_a_run(
     assert response.json() == {"run_id": "run-123"}
 
 
+def test_ask_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    response = client.post("/projects/demo/ask", json={"question": "Can we use this?"})
+    assert response.status_code == 422  # missing Authorization header
+
+
+def test_ask_returns_answer_text(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")  # read-only role: asking is still allowed
+    monkeypatch.setattr(
+        dashboard_api,
+        "ask_question",
+        lambda *_a, **_kw: "Yes, per claim CLM-1. [1]\n\nEvidence, not legal advice.",
+    )
+
+    response = client.post("/projects/demo/ask", json={"question": "Can we use this?"})
+    assert response.status_code == 200
+    assert response.json() == {"answer": "Yes, per claim CLM-1. [1]\n\nEvidence, not legal advice."}
+
+
+def test_ask_surfaces_coordinator_error_as_422(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("rvsrathore17@gmail.com", "legal")
+
+    def _raise(*_a: object, **_kw: object) -> str:
+        raise ValueError("unknown project/asset")
+
+    monkeypatch.setattr(dashboard_api, "ask_question", _raise)
+
+    response = client.post("/projects/demo/ask", json={"question": "Can we use this?"})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "unknown project/asset"}
+
+
+def test_export_eo_pack_requires_auth(client: TestClient, db_session: Session) -> None:
+    _seed_project(db_session)
+    assert client.post("/projects/demo/exports/eo-pack").status_code == 422
+
+
+def test_export_eo_pack_uploads_and_signs(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    monkeypatch.setattr(dashboard_api, "generate_eo_pack", lambda *_a, **_kw: b"%PDF-fake")
+    monkeypatch.setattr(
+        dashboard_api,
+        "_upload_export_pdf",
+        lambda project_id, filename, _pdf_bytes: f"https://signed.example/{project_id}/{filename}",
+    )
+
+    response = client.post("/projects/demo/exports/eo-pack")
+    assert response.status_code == 200
+    assert response.json() == {"url": "https://signed.example/demo/eo-pack.pdf"}
+
+
+def test_export_factcheck_report_uploads_and_signs(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    monkeypatch.setattr(dashboard_api, "generate_factcheck_report", lambda *_a, **_kw: b"%PDF-fake")
+    monkeypatch.setattr(
+        dashboard_api,
+        "_upload_export_pdf",
+        lambda project_id, filename, _pdf_bytes: f"https://signed.example/{project_id}/{filename}",
+    )
+
+    response = client.post("/projects/demo/exports/factcheck-report")
+    assert response.status_code == 200
+    assert response.json() == {"url": "https://signed.example/demo/factcheck-report.pdf"}
+
+
+def test_export_clearance_sheet_returns_sheet_url(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_project(db_session)
+    _as("iamrudra1703@gmail.com", "producer")
+    monkeypatch.setattr(
+        dashboard_api,
+        "export_clearance_sheet",
+        lambda *_a, **_kw: "https://docs.google.com/spreadsheets/d/sheet-123",
+    )
+
+    response = client.post("/projects/demo/exports/clearance-sheet")
+    assert response.status_code == 200
+    assert response.json() == {"url": "https://docs.google.com/spreadsheets/d/sheet-123"}
+
+
 def test_asset_timeline_requires_auth(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
     _seed_asset(db_session)

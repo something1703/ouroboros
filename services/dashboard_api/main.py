@@ -29,6 +29,9 @@ from packages.claims.models import Asset, Claim, Evidence, Project, Risk, Segmen
 from packages.common.errors import Conflict, NotFound
 from packages.common.logging import get_logger
 from packages.common.tracing import configure_tracing, instrument_fastapi
+from packages.exports.clearance_sheet import export_clearance_sheet
+from packages.exports.eo_pdf import generate_eo_pack
+from packages.exports.factcheck_pdf import generate_factcheck_report
 from packages.ledger.db import session_scope
 from packages.ledger.projections import Projector
 from packages.ledger.repositories import (
@@ -44,7 +47,7 @@ from packages.parallel_client.monitor import trigger as monitor_trigger
 from packages.parallel_client.monitor import update as monitor_update
 
 from .auth import UserContext, get_current_user, require_internal_caller
-from .runs import start_run
+from .runs import ask_question, start_run
 
 configure_tracing(service="dashboard_api")
 log = get_logger(__name__)
@@ -205,6 +208,22 @@ class TriggerAllResponse(BaseModel):
     total: int
     triggered: int
     errors: list[dict[str, str]]
+
+
+class AskRequest(BaseModel):
+    question: str
+    asset_id: str = ""
+
+
+class AskResponse(BaseModel):
+    answer: str
+
+
+class ExportResponse(BaseModel):
+    url: str
+
+
+EXPORT_URL_TTL = timedelta(hours=1)
 
 
 @app.exception_handler(NotFound)
@@ -635,6 +654,68 @@ async def create_run(
         ProjectRepo.require(session, project_id)
     run_id = start_run(project_id, body.asset_id, mode=body.mode)
     return StartRunResponse(run_id=run_id)
+
+
+@app.post("/projects/{project_id}/ask", response_model=AskResponse)
+def ask(
+    project_id: str, body: AskRequest, _user: UserContext = Depends(get_current_user)
+) -> AskResponse:
+    """PHASE_08.md §8.4: the project page's chat drawer. Synchronous, unlike
+    `/runs` (fire-and-forget with a polled `run_id`) -- the caller wants the actual
+    answer in this one response. Open to every role (legal/editorial/producer):
+    unlike overriding a claim or starting a run, asking a question is read-only."""
+    with session_scope() as session:
+        ProjectRepo.require(session, project_id)
+    try:
+        answer = ask_question(project_id, body.asset_id, body.question)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return AskResponse(answer=answer)
+
+
+@app.post("/projects/{project_id}/exports/eo-pack", response_model=ExportResponse)
+def export_eo_pack(
+    project_id: str, _user: UserContext = Depends(get_current_user)
+) -> ExportResponse:
+    """PHASE_08.md §8.5: E&O evidence pack PDF. Open to every role (producer included --
+    exports are read-only, not a business-state change like starting a run)."""
+    with session_scope() as session:
+        pdf_bytes = generate_eo_pack(session, project_id)
+    url = _upload_export_pdf(project_id, "eo-pack.pdf", pdf_bytes)
+    return ExportResponse(url=url)
+
+
+@app.post("/projects/{project_id}/exports/factcheck-report", response_model=ExportResponse)
+def export_factcheck_report(
+    project_id: str, _user: UserContext = Depends(get_current_user)
+) -> ExportResponse:
+    """PHASE_08.md §8.5: timecode-ordered fact-check report PDF."""
+    with session_scope() as session:
+        pdf_bytes = generate_factcheck_report(session, project_id)
+    url = _upload_export_pdf(project_id, "factcheck-report.pdf", pdf_bytes)
+    return ExportResponse(url=url)
+
+
+@app.post("/projects/{project_id}/exports/clearance-sheet", response_model=ExportResponse)
+def export_clearance_log(
+    project_id: str, _user: UserContext = Depends(get_current_user)
+) -> ExportResponse:
+    """PHASE_08.md §8.5: clearance log exported to a Google Sheet (idempotent --
+    `packages/exports/clearance_sheet.py` updates the same sheet on repeat calls)."""
+    with session_scope() as session:
+        url = export_clearance_sheet(session, project_id)
+    return ExportResponse(url=url)
+
+
+def _upload_export_pdf(project_id: str, filename: str, pdf_bytes: bytes) -> str:
+    bucket_name = os.environ.get(
+        "ARTIFACTS_BUCKET", f"{os.environ['GOOGLE_CLOUD_PROJECT']}-artifacts-dev"
+    )
+    object_name = f"exports/{project_id}/{filename}"
+    storage.Client().bucket(bucket_name).blob(object_name).upload_from_string(
+        pdf_bytes, content_type="application/pdf"
+    )
+    return _generate_signed_url(bucket_name, object_name, method="GET", expiration=EXPORT_URL_TTL)
 
 
 @app.post("/internal/runs/auto", dependencies=[Depends(require_internal_caller)])

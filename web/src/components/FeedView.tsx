@@ -74,7 +74,11 @@ export function FeedView({
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-sm text-muted-foreground">No events yet.</p>
+        <p className="text-sm text-muted-foreground">
+          {events.length === 0
+            ? "No events yet."
+            : `No “${filter === "all" ? "all" : KIND_LABELS[filter]}” events yet.`}
+        </p>
       )}
 
       <ul className="space-y-0.5">

@@ -26,29 +26,32 @@ const EXPORT_FN: Record<ExportKind, (projectId: string) => Promise<{ url: string
 
 export function ExportsPanel({ projectId }: { projectId: string }) {
   const [links, setLinks] = useState<Partial<Record<ExportKind, string>>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Partial<Record<ExportKind, string>>>({})
   const [pending, setPending] = useState<ExportKind | null>(null)
 
   const mutation = useMutation({
     mutationFn: (kind: ExportKind) => EXPORT_FN[kind](projectId),
     onMutate: (kind: ExportKind) => {
       setPending(kind)
-      setError(null)
+      setErrors((prev) => ({ ...prev, [kind]: undefined }))
     },
     onSuccess: (res, kind) => {
       setLinks((prev) => ({ ...prev, [kind]: res.url }))
       setPending(null)
     },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Export failed")
+    onError: (err, kind) => {
+      setErrors((prev) => ({
+        ...prev,
+        [kind]: err instanceof Error ? err.message : "Export failed",
+      }))
       setPending(null)
     },
   })
 
   return (
-    <section className="space-y-3 rounded-md border border-border p-4">
-      <h2 className="text-sm font-medium text-foreground">Exports</h2>
-      <div className="flex flex-wrap gap-2">
+    <section className="border-t border-border pt-4">
+      <h2 className="text-base font-medium text-foreground">Exports</h2>
+      <div className="mt-3 flex flex-wrap gap-2">
         {EXPORTS.map(({ kind, label }) => (
           <Button
             key={kind}
@@ -61,23 +64,26 @@ export function ExportsPanel({ projectId }: { projectId: string }) {
           </Button>
         ))}
       </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      {Object.values(links).some(Boolean) && (
-        <ul className="space-y-1">
-          {EXPORTS.filter(({ kind }) => links[kind]).map(({ kind, label }) => (
+      <ul className="mt-2 space-y-1">
+        {EXPORTS.map(({ kind, label }) =>
+          links[kind] ? (
             <li key={kind} className="text-sm">
               <a
                 href={links[kind]}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand underline underline-offset-2"
+                className="text-primary underline underline-offset-2"
               >
                 {label} ready — open
               </a>
             </li>
-          ))}
-        </ul>
-      )}
+          ) : errors[kind] ? (
+            <li key={kind} className="text-sm text-destructive">
+              {label}: {errors[kind]}
+            </li>
+          ) : null,
+        )}
+      </ul>
     </section>
   )
 }

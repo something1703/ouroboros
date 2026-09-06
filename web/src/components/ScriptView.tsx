@@ -11,10 +11,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
 const RISK_RANK: Record<RiskLevel, number> = { blocking: 0, high: 1, medium: 2, low: 3, none: 4 }
 
+// Signal Red only, per DESIGN.md -- the brand accent is not a risk-severity color.
 function riskColor(level: RiskLevel | null): string {
   if (level === "blocking" || level === "high") return "var(--destructive)"
-  if (level === "medium") return "var(--brand)"
-  return "var(--border)"
+  return "var(--muted-foreground)"
 }
 
 function pageRisk(claims: TimelineClaim[]): RiskLevel | null {
@@ -57,34 +57,46 @@ function PdfPage({
     }
   }, [pdf, pageNumber])
 
+  const risk = pageRisk(claims)
+
   return (
-    <div className="flex gap-3">
-      <div
-        className="w-1 shrink-0 rounded-full"
-        style={{ backgroundColor: riskColor(pageRisk(claims)) }}
-        aria-hidden
-      />
+    <div className="flex flex-col gap-3 lg:flex-row">
       <div className="flex-1">
         <canvas ref={canvasRef} className="max-w-full rounded-md border border-border" />
       </div>
-      <div className="w-48 shrink-0 space-y-1.5 pt-1">
-        <p className="font-mono text-xs text-muted-foreground">Page {pageNumber}</p>
-        {claims.map((claim) => (
-          <button
-            key={claim.claim_id}
-            type="button"
-            onClick={() => onPin(claim.claim_id)}
-            className="flex w-full items-start gap-1.5 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <span
-              className="mt-1 size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: riskColor(claim.risk_level) }}
-              aria-hidden
-            />
-            <span className="truncate">{claim.claim_text}</span>
-          </button>
-        ))}
-      </div>
+      {/* No fixed-width rail when a page has no claims -- an empty 192px column
+          running the full document was the previous default. */}
+      {claims.length > 0 && (
+        <div className="w-full space-y-1.5 pt-1 lg:w-48 lg:shrink-0">
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span>
+              Page <span className="font-mono">{pageNumber}</span>
+            </span>
+            {risk && (
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: riskColor(risk) }}
+                aria-hidden
+              />
+            )}
+          </p>
+          {claims.map((claim) => (
+            <button
+              key={claim.claim_id}
+              type="button"
+              onClick={() => onPin(claim.claim_id)}
+              className="flex w-full items-start gap-1.5 rounded-md px-1.5 py-1 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <span
+                className="mt-1.5 size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: riskColor(claim.risk_level) }}
+                aria-hidden
+              />
+              <span className="truncate">{claim.claim_text}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

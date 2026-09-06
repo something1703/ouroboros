@@ -44,9 +44,12 @@ const RISK_RANK: Record<RiskLevel | "unassessed", number> = {
   unassessed: 5,
 }
 
+// Signal Red is reserved for blocking/high risk (DESIGN.md: "never used for
+// anything else"). Routing medium risk through the brand accent instead turned a
+// worklist of a dozen claims into a dozen orange dots competing with the one
+// signal the accent is supposed to carry per view.
 function riskDotColor(level: RiskLevel | null): string {
   if (level === "blocking" || level === "high") return "var(--destructive)"
-  if (level === "medium") return "var(--brand)"
   return "var(--muted-foreground)"
 }
 
@@ -115,14 +118,14 @@ function ClaimRow({
           style={{ backgroundColor: riskDotColor(claim.risk_level) }}
           aria-hidden
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 max-w-[70ch] flex-1">
           <p className="truncate text-sm font-medium text-foreground">{claim.entity_text}</p>
-          <p className="truncate text-xs text-muted-foreground">{claim.claim_text}</p>
+          <p className="truncate text-sm text-foreground/85">{claim.claim_text}</p>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground capitalize">
+        <span className="shrink-0 text-sm text-muted-foreground capitalize">
           {riskLabel(claim.risk_level)}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground capitalize">{claim.status}</span>
+        <span className="shrink-0 text-sm text-muted-foreground capitalize">{claim.status}</span>
       </button>
     </li>
   )
@@ -131,7 +134,9 @@ function ClaimRow({
 function ProjectDetail({ projectId }: { projectId: string }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<{ text: string; isError: boolean } | null>(
+    null,
+  )
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [askOpen, setAskOpen] = useState(false)
 
@@ -178,7 +183,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     return scripts.sort((a, b) => (b.ingested_at ?? "").localeCompare(a.ingested_at ?? ""))[0]
   }, [assetsQuery.data])
 
-  const canRun = user.role === "legal" || user.role === "editorial"
+  const canRun = user.role === "legal" || user.role === "editorial" || user.role === "judge"
 
   const runMutation = useMutation({
     mutationFn: (mode: Extract<RunMode, "clear" | "truecut">) => {
@@ -186,19 +191,33 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       return startRun(projectId, { asset_id: latestCut.asset_id, mode })
     },
     onSuccess: (res, mode) => {
-      setActionMessage(`${mode === "clear" ? "CLEAR" : "TRUE CUT"} run started — run_id ${res.run_id}`)
+      setActionMessage({
+        text: `${mode === "clear" ? "CLEAR" : "TRUE CUT"} run started — run_id ${res.run_id}`,
+        isError: false,
+      })
     },
-    onError: (err) => setActionMessage(err instanceof Error ? err.message : "Run failed to start"),
+    onError: (err) =>
+      setActionMessage({
+        text: err instanceof Error ? err.message : "Run failed to start",
+        isError: true,
+      }),
   })
 
   const triggerMutation = useMutation({
     mutationFn: () => triggerAllMonitors(projectId),
     onSuccess: (res) => {
-      setActionMessage(`Triggered ${res.triggered}/${res.total} monitor(s)`)
+      setActionMessage({
+        text: `Triggered ${res.triggered}/${res.total} monitor(s)`,
+        isError: false,
+      })
       void queryClient.invalidateQueries({ queryKey: ["metrics", projectId] })
       void queryClient.invalidateQueries({ queryKey: ["claims", projectId] })
     },
-    onError: (err) => setActionMessage(err instanceof Error ? err.message : "Trigger failed"),
+    onError: (err) =>
+      setActionMessage({
+        text: err instanceof Error ? err.message : "Trigger failed",
+        isError: true,
+      }),
   })
 
   if (projectQuery.isLoading || metricsQuery.isLoading) {
@@ -214,6 +233,18 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     return <p className="p-6 text-sm text-destructive">Couldn't load this project.</p>
   }
 
+  if (metricsQuery.isError || !metricsQuery.data) {
+    return (
+      <div className="flex flex-col items-start gap-3 p-6">
+        <h1 className="font-display text-2xl text-foreground">{projectQuery.data.title}</h1>
+        <p className="text-sm text-destructive">Couldn't load this project's metrics.</p>
+        <Button size="sm" variant="outline" onClick={() => void metricsQuery.refetch()}>
+          Try again
+        </Button>
+      </div>
+    )
+  }
+
   const project = projectQuery.data
   const metrics = metricsQuery.data
 
@@ -227,7 +258,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         }
       `}</style>
 
-      {metrics && <DriftHero title={project.title} metrics={metrics} />}
+      <DriftHero title={project.title} metrics={metrics} />
 
       <Tabs defaultValue="overview" className="min-h-0 flex-1">
         <TabsList className="mx-6 mt-4">
@@ -238,15 +269,26 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 p-6 pb-28">
-          <ExportsPanel projectId={projectId} />
+          {assetsQuery.isError && (
+            <p className="text-sm text-destructive">
+              Couldn't load this project's assets — the Script and Video tabs may be missing below.
+            </p>
+          )}
 
+          {/* The risk worklist outranks exports -- it's this page's actual point,
+              per DESIGN.md's own description of the product. */}
           <section>
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-sm font-medium text-foreground">Needs attention</h2>
-              <span className="text-xs text-muted-foreground">{rankedClaims.length} claims</span>
+            <div className="mb-3 flex items-baseline justify-between">
+              <h2 className="text-base font-medium text-foreground">All claims</h2>
+              <span className="text-sm text-muted-foreground">
+                {rankedClaims.length} · worst risk first
+              </span>
             </div>
             {claimsQuery.isLoading && <Skeleton className="h-32 w-full" />}
-            {!claimsQuery.isLoading && rankedClaims.length === 0 && (
+            {claimsQuery.isError && (
+              <p className="text-sm text-destructive">Couldn't load this project's claims.</p>
+            )}
+            {!claimsQuery.isLoading && !claimsQuery.isError && rankedClaims.length === 0 && (
               <p className="text-sm text-muted-foreground">No claims ingested yet.</p>
             )}
             {rankedClaims.length > 0 && (
@@ -262,6 +304,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               </ul>
             )}
           </section>
+
+          <ExportsPanel projectId={projectId} />
         </TabsContent>
 
         {latestScript && (
@@ -291,47 +335,58 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
       <AskDrawer projectId={projectId} open={askOpen} onClose={() => setAskOpen(false)} />
 
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-card px-6 py-4">
-        <Button size="sm" variant="outline" onClick={() => setAskOpen(true)}>
-          Ask Ouroboros
-        </Button>
-        {canRun ? (
-          <>
-            <Button
-              size="sm"
-              disabled={!latestCut || runMutation.isPending}
-              onClick={() => runMutation.mutate("clear")}
-            >
-              Run CLEAR
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!latestCut || runMutation.isPending}
-              onClick={() => runMutation.mutate("truecut")}
-            >
-              Run TRUE CUT
-            </Button>
-            {!latestCut && (
-              <span className="text-xs text-muted-foreground">
-                Upload a cut before starting a run.
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            Read-only for producer — legal or editorial can run verification passes.
-          </span>
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card px-6 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Run CLEAR is the one primary action on this page (DESIGN.md), so it is
+              the one button at full size; everything else here is secondary. */}
+          {canRun ? (
+            <>
+              <Button
+                disabled={!latestCut || runMutation.isPending}
+                onClick={() => runMutation.mutate("clear")}
+              >
+                Run CLEAR
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!latestCut || runMutation.isPending}
+                onClick={() => runMutation.mutate("truecut")}
+              >
+                Run TRUE CUT
+              </Button>
+              {!latestCut && (
+                <span className="text-sm text-muted-foreground">
+                  Upload a cut before starting a run.
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Read-only for producer — legal or editorial can run verification passes.
+            </span>
+          )}
+          <Button size="sm" variant="outline" onClick={() => setAskOpen(true)}>
+            Ask Ouroboros
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={triggerMutation.isPending}
+            onClick={() => triggerMutation.mutate()}
+          >
+            Trigger monitors
+          </Button>
+        </div>
+        {actionMessage && (
+          <p
+            className={
+              actionMessage.isError ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+            }
+          >
+            {actionMessage.text}
+          </p>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={triggerMutation.isPending}
-          onClick={() => triggerMutation.mutate()}
-        >
-          Trigger monitors
-        </Button>
-        {actionMessage && <p className="w-full text-xs text-muted-foreground">{actionMessage}</p>}
       </div>
     </div>
   )

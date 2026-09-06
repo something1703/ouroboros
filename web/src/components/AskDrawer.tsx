@@ -56,12 +56,17 @@ const MARKDOWN_COMPONENTS: Components = {
   li: (props) => <li className="text-sm text-foreground" {...props} />,
   blockquote: (props) => (
     <blockquote
-      className="mt-2 border-l-2 border-brand pl-3 text-sm text-muted-foreground italic"
+      className="mt-2 border-l border-border pl-3 text-sm text-muted-foreground italic"
       {...props}
     />
   ),
   a: (props) => (
-    <a className="text-brand underline underline-offset-2" target="_blank" rel="noreferrer" {...props} />
+    <a
+      className="text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+      target="_blank"
+      rel="noreferrer"
+      {...props}
+    />
   ),
   code: (props) => (
     <code className="rounded bg-accent px-1 py-0.5 font-mono text-xs text-foreground" {...props} />
@@ -115,7 +120,7 @@ export function AskDrawer({
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
           {turns.length === 0 && !askMutation.isPending && (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Try asking:</p>
+              <p className="text-sm text-muted-foreground">Try asking:</p>
               {EXAMPLE_PROMPTS.map((prompt) => (
                 <button
                   key={prompt}
@@ -130,20 +135,16 @@ export function AskDrawer({
           )}
 
           {turns.map((turn, i) => (
-            <div key={i} className="space-y-2">
-              <p className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-foreground">
-                {turn.question}
-              </p>
+            <div key={i} className="space-y-2 border-t border-border pt-4 first:border-0 first:pt-0">
+              <p className="text-sm font-medium text-foreground">{turn.question}</p>
               {turn.error ? (
                 <p className="text-sm text-destructive">{turn.error}</p>
               ) : (
-                <div className="space-y-2 rounded-md border border-border px-3 py-2">
+                <div>
                   <ReactMarkdown components={MARKDOWN_COMPONENTS}>
                     {stripGuardrail(turn.answer)}
                   </ReactMarkdown>
-                  <p className="border-t border-border pt-2 text-xs text-muted-foreground italic">
-                    {GUARDRAIL_LINE}
-                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground italic">{GUARDRAIL_LINE}</p>
                 </div>
               )}
             </div>

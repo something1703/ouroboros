@@ -82,7 +82,10 @@
   --input: #332c24;
   --ring: #fb631b;
   --radius: 0.5rem;
-  --sidebar: #1a1613;
+  /* Card-charcoal, not an invented fifth neutral -- DESIGN.md's documented ladder
+     only has background/card/popover, and the sidebar is the same raised step as
+     a card, just full-height. */
+  --sidebar: #1f1b17;
   --sidebar-foreground: #ede7dd;
   --sidebar-primary: #fb631b;
   --sidebar-primary-foreground: #15120f;
@@ -115,4 +118,77 @@ body {
 h1, h2, h3 {
   font-family: var(--font-display);
   text-wrap: balance;
+}
+
+/*
+  Browser-drawn surfaces. These ship with defaults that belong to no design system
+  -- a blue selection, a light scrollbar, a platform focus ring -- and on a warm
+  near-black ground each one reads as a leak from somewhere else. Painted from the
+  same palette as everything else.
+*/
+::selection {
+  background: color-mix(in srgb, var(--brand) 32%, transparent);
+  color: var(--foreground);
+}
+
+:root {
+  color-scheme: dark; /* themes the caret, native controls, and the default scrollbar */
+  scrollbar-color: var(--border) var(--background);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 3px solid var(--background);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The cadence dial's control. `accent-color` alone leaves a light default track. */
+input[type="range"] {
+  appearance: none;
+  background: transparent;
+  cursor: grab;
+}
+input[type="range"]:active {
+  cursor: grabbing;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+}
+input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  margin-top: -8px;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 19px;
+  height: 19px;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand);
 }

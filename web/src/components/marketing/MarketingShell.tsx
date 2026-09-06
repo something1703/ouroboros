@@ -15,36 +15,49 @@ export function MarketingShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xs">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2" onClick={() => setMenuOpen(false)}>
-            <img src="/logo.svg" alt="" className="h-7 w-7" />
-            <span className="font-display text-lg">Ouroboros</span>
+      {/*
+        A slim, fixed-height bar (h-14, down from an organic ~4.5rem py-4 shell)
+        reads as engineered rather than assembled -- the height doesn't float with
+        whatever the logo's line-height happens to be. Nav items get a pill
+        hover/active background (bg-accent) rather than only a color shift: DESIGN.md
+        reserves the brand accent for one signal per view, and this header already
+        spends that signal on "Open dashboard" -- so the active route is neutral, not
+        orange, exactly per the ring/button/nav/focus-ring "pick one" rule.
+      */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+          <Link
+            to="/"
+            className="flex items-center gap-2 tracking-tight"
+            onClick={() => setMenuOpen(false)}
+          >
+            <img src="/logo.svg" alt="" className="h-6 w-6" />
+            <span className="font-display text-[1.05rem] leading-none">Ouroboros</span>
           </Link>
 
-          <nav className="hidden items-center gap-6 md:flex">
+          <nav className="hidden items-center gap-1 md:flex">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
                 className={({ isActive }) =>
                   cn(
-                    "text-sm text-muted-foreground transition-colors hover:text-foreground",
-                    isActive && "text-foreground",
+                    "rounded-full px-3.5 py-1.5 text-[0.9rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                    isActive && "bg-accent text-foreground",
                   )
                 }
               >
                 {link.label}
               </NavLink>
             ))}
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="ml-3">
               <Link to="/app">Open dashboard</Link>
             </Button>
           </nav>
 
           <button
             type="button"
-            className="rounded-md p-1.5 text-foreground hover:bg-muted md:hidden"
+            className="rounded-full p-1.5 text-foreground hover:bg-accent md:hidden"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             onClick={() => setMenuOpen((v) => !v)}
           >
@@ -53,13 +66,18 @@ export function MarketingShell() {
         </div>
 
         {menuOpen && (
-          <nav className="flex flex-col gap-1 border-t border-border px-6 py-3 md:hidden">
+          <nav className="flex flex-col gap-1 border-t border-border px-4 py-3 md:hidden">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
                 onClick={() => setMenuOpen(false)}
-                className="rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-lg px-3 py-2.5 text-[0.95rem] font-medium text-muted-foreground hover:bg-accent hover:text-foreground",
+                    isActive && "bg-accent text-foreground",
+                  )
+                }
               >
                 {link.label}
               </NavLink>
@@ -67,7 +85,7 @@ export function MarketingShell() {
             <Link
               to="/app"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-2 py-2 text-sm font-medium text-primary"
+              className="mt-1 rounded-lg bg-primary px-3 py-2.5 text-center text-[0.95rem] font-medium text-primary-foreground"
             >
               Open dashboard
             </Link>

@@ -36,14 +36,15 @@ function fieldLabel(field: string): string {
   return field.replace(/_/g, " ")
 }
 
+// Signal Red stays reserved for blocking/high, per DESIGN.md's naming of the rule.
+// Medium risk is a hairline-toned dot, not the brand accent -- the accent is
+// rationed to one signal per view, and a worklist can show a dozen mediums in one
+// glance.
 function riskDotColor(level: RiskLevel | null): string {
   if (level === "blocking" || level === "high") return "var(--destructive)"
-  if (level === "medium") return "var(--brand)"
   return "var(--muted-foreground)"
 }
 
-// Numbers every citation across the latest evidence's field basis once, so "[n]"
-// stays consistent between the field list and the citation list below it.
 function useCitationIndex(detail: ClaimDetail | undefined) {
   return useMemo(() => {
     const latest = detail?.evidence_history.at(-1)
@@ -59,6 +60,21 @@ function useCitationIndex(detail: ClaimDetail | undefined) {
     }
     return { index, ordered, latest }
   }, [detail])
+}
+
+function Section({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="border-t border-border pt-4">
+      <h3 className="text-sm font-medium text-foreground">{label}</h3>
+      <div className="mt-2 text-sm text-foreground/90">{children}</div>
+    </section>
+  )
 }
 
 function OverrideForm({
@@ -93,7 +109,7 @@ function OverrideForm({
 
   return (
     <form
-      className="space-y-2 border-t border-border pt-3"
+      className="space-y-2.5"
       onSubmit={(e) => {
         e.preventDefault()
         if (!status && !riskLevel) return
@@ -101,7 +117,7 @@ function OverrideForm({
         mutation.mutate()
       }}
     >
-      <p className="text-xs font-medium text-foreground">Human override ({claimKind})</p>
+      <p className="text-sm text-muted-foreground">Applies to this {claimKind} claim only.</p>
       <div className="flex gap-2">
         <Select value={status} onValueChange={(v) => setStatus(v as VerificationStatus)}>
           <SelectTrigger className="flex-1">
@@ -136,7 +152,7 @@ function OverrideForm({
         className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       {mutation.isError && (
-        <p className="text-xs text-destructive">
+        <p className="text-sm text-destructive">
           {mutation.error instanceof Error ? mutation.error.message : "Override failed"}
         </p>
       )}
@@ -157,7 +173,12 @@ export function ClaimDrawer({
   onClose: () => void
 }) {
   const { user } = useAuth()
-  const { data: detail, isLoading } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["claim", claimId],
     queryFn: () => getClaimDetail(projectId, claimId!),
     enabled: claimId != null,
@@ -166,7 +187,8 @@ export function ClaimDrawer({
 
   const canOverride =
     detail != null &&
-    ((user.role === "legal" && detail.claim.kind === "legal") ||
+    (user.role === "judge" ||
+      (user.role === "legal" && detail.claim.kind === "legal") ||
       (user.role === "editorial" && detail.claim.kind === "factual"))
 
   return (
@@ -180,6 +202,16 @@ export function ClaimDrawer({
           </div>
         )}
 
+        {isError && (
+          <div className="flex h-full flex-col items-start justify-center gap-3 p-6">
+            <SheetTitle className="sr-only">Couldn't load this claim</SheetTitle>
+            <p className="text-sm text-foreground">Couldn't load this claim.</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
+
         {detail && (
           <>
             <SheetHeader>
@@ -187,7 +219,7 @@ export function ClaimDrawer({
               <SheetDescription>{detail.claim.claim_text}</SheetDescription>
             </SheetHeader>
 
-            <div className="space-y-4 overflow-y-auto px-4 pb-4">
+            <div className="space-y-4 overflow-y-auto px-4 pb-6">
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="outline" className="capitalize">
                   {detail.claim.kind}
@@ -199,7 +231,7 @@ export function ClaimDrawer({
                   {detail.claim.status}
                 </Badge>
                 {detail.risk && (
-                  <Badge variant="outline" className="gap-1.5">
+                  <Badge variant="outline" className="gap-1.5 capitalize">
                     <span
                       className="size-1.5 rounded-full"
                       style={{ backgroundColor: riskDotColor(detail.risk.level) }}
@@ -208,49 +240,46 @@ export function ClaimDrawer({
                     {detail.risk.level}
                   </Badge>
                 )}
+                {detail.monitor_status && (
+                  <Badge variant="outline" className="capitalize">
+                    Monitor {detail.monitor_status}
+                  </Badge>
+                )}
               </div>
 
               {detail.claim.jurisdictions.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Jurisdictions</p>
+                <Section label="Jurisdictions">
                   <div className="flex flex-wrap gap-1">
                     {detail.claim.jurisdictions.map((j) => (
-                      <Badge key={j} variant="secondary" className="font-mono uppercase">
+                      <Badge key={j} variant="outline" className="font-mono">
                         {j}
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {detail.monitor_status && (
-                <p className="text-xs text-muted-foreground">
-                  Monitor: <span className="font-mono">{detail.monitor_status}</span>
-                </p>
+                </Section>
               )}
 
               {detail.claim.prior_production_note && (
-                <p className="rounded-lg border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-                  Parallel consulted Ouroboros ledger: get_prior_decisions —{" "}
-                  {detail.claim.prior_production_note}
-                </p>
+                <Section label="Prior production">
+                  <p>{detail.claim.prior_production_note}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Surfaced from the studio's own ledger via Parallel Memory.
+                  </p>
+                </Section>
               )}
 
               {latest && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Evidence (cycle {latest.cycle}, {latest.overall_confidence} confidence)
-                  </p>
-                  <ul className="space-y-2">
+                <Section
+                  label={`Evidence — cycle ${latest.cycle}, ${latest.overall_confidence} confidence`}
+                >
+                  <ul className="space-y-3">
                     {latest.basis.map((basis) => (
-                      <li key={basis.field} className="text-xs">
-                        <span className="font-medium text-foreground capitalize">
-                          {fieldLabel(basis.field)}
-                        </span>{" "}
-                        <span className="text-muted-foreground capitalize">
-                          ({basis.confidence})
-                        </span>
-                        <p className="text-muted-foreground">
+                      <li key={basis.field}>
+                        <p className="text-sm text-foreground">
+                          <span className="font-medium capitalize">{fieldLabel(basis.field)}</span>{" "}
+                          <span className="text-muted-foreground">({basis.confidence})</span>
+                        </p>
+                        <p className="mt-0.5 text-foreground/90">
                           {basis.reasoning}{" "}
                           {basis.citations.map((c) => (
                             <a
@@ -267,15 +296,14 @@ export function ClaimDrawer({
                       </li>
                     ))}
                   </ul>
-                </div>
+                </Section>
               )}
 
               {citations.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Citations</p>
-                  <ol className="space-y-1 text-xs">
+                <Section label="Citations">
+                  <ol className="space-y-1">
                     {citations.map((c, i) => (
-                      <li key={c.url}>
+                      <li key={c.url} className="truncate">
                         <a
                           href={c.url}
                           target="_blank"
@@ -287,33 +315,32 @@ export function ClaimDrawer({
                       </li>
                     ))}
                   </ol>
-                </div>
+                </Section>
               )}
 
               {detail.history.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Verification history
-                  </p>
+                <Section label="Verification history">
                   <ul className="space-y-1.5">
                     {detail.history.map((event) => (
-                      <li key={event.event_id} className="text-xs text-muted-foreground">
+                      <li key={event.event_id} className="text-muted-foreground">
                         <span className="font-mono">{new Date(event.at).toLocaleString()}</span>{" "}
                         — {event.actor}: {event.from_status ?? "—"} → {event.to_status}
                         {event.note && <span className="italic"> ({event.note})</span>}
                       </li>
                     ))}
                   </ul>
-                </div>
+                </Section>
               )}
 
               {canOverride && (
-                <OverrideForm
-                  projectId={projectId}
-                  claimId={detail.claim.claim_id}
-                  claimKind={detail.claim.kind}
-                  onDone={onClose}
-                />
+                <Section label="Human override">
+                  <OverrideForm
+                    projectId={projectId}
+                    claimId={detail.claim.claim_id}
+                    claimKind={detail.claim.kind}
+                    onDone={onClose}
+                  />
+                </Section>
               )}
             </div>
           </>

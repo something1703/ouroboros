@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CoilSpiral } from "@/components/marketing/CoilSpiral"
+import { LoopDiagram, LoopTrack } from "@/components/marketing/LoopDiagram"
 import { Button } from "@/components/ui/button"
 
 interface Stage {
@@ -44,33 +44,47 @@ const STAGES: Stage[] = [
 
 export function HowItWorksPage() {
   return (
-    <div className="mx-auto max-w-4xl px-6 py-16">
-      <div className="mb-16 flex flex-col items-center gap-6 text-center">
-        <CoilSpiral turns={2.5} size={220} strokeWidth={4} />
-        <h1 className="font-display text-4xl text-foreground">How Ouroboros works</h1>
-        <p className="max-w-xl text-muted-foreground">
-          Five real stages, running on a real deployed system — Gemini, Parallel, and
-          Google Cloud, not a demo shell.
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl px-6 py-16 lg:py-24">
+      <h1 className="font-display text-4xl text-foreground sm:text-5xl">How Ouroboros works</h1>
+      <p className="mt-4 max-w-[56ch] text-lg leading-relaxed text-foreground/90">
+        Five stages on a real deployed system. Ingest and triage run once per asset; verify, watch
+        and drift are the cycle that repeats until the film is delivered.
+      </p>
 
-      <div className="space-y-16">
+      <figure className="my-14">
+        <LoopDiagram className="hidden w-full md:block" />
+        <div className="md:hidden">
+          <LoopTrack />
+        </div>
+      </figure>
+
+      <div>
         {STAGES.map((stage) => (
-          <div key={stage.label} className="space-y-2 border-t border-border pt-8">
-            <h2 className="font-display text-2xl text-foreground">{stage.title}</h2>
-            <p className="max-w-2xl text-muted-foreground">{stage.body}</p>
-            <p className="font-mono text-xs text-muted-foreground">{stage.stack}</p>
-          </div>
+          <section key={stage.label} className="border-t border-border py-10">
+            <h2 className="font-display text-[1.75rem] leading-tight text-foreground">
+              {stage.title}
+            </h2>
+            <p className="mt-4 max-w-[68ch] text-[1.0625rem] leading-[1.72] text-foreground/90">
+              {stage.body}
+            </p>
+            <p className="mt-5 max-w-[68ch] font-mono text-sm text-muted-foreground">
+              {stage.stack}
+            </p>
+          </section>
         ))}
       </div>
 
-      <div className="mt-20 flex flex-col items-center gap-4 border-t border-border pt-12 text-center">
-        <h2 className="font-display text-2xl text-foreground">Want the technical detail?</h2>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild>
-            <Link to="/docs">Read the docs</Link>
+      <div className="mt-14 border-t border-border pt-12">
+        <h2 className="font-display text-[1.75rem] text-foreground">Want the technical detail?</h2>
+        <p className="mt-3 max-w-[56ch] text-[1.0625rem] leading-relaxed text-muted-foreground">
+          The docs cover how we framed the problem, what we turned down, what it measurably does,
+          and what is still broken.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Button asChild size="lg">
+            <Link to="/docs/approach">Read the docs</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild size="lg" variant="outline">
             <Link to="/app">Open the dashboard</Link>
           </Button>
         </div>

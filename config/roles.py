@@ -10,7 +10,7 @@ from typing import Final, Literal
 
 import yaml
 
-Role = Literal["legal", "editorial", "producer"]
+Role = Literal["legal", "editorial", "producer", "judge"]
 
 _ROLES_PATH = Path(__file__).parent / "roles.yaml"
 

@@ -29,13 +29,23 @@ from pydantic import BaseModel
 
 from config.roles import ROLES, Role
 
+_VIEWABLE_ROLES: frozenset[Role] = frozenset({"legal", "editorial", "producer"})
+
 
 class UserContext(BaseModel):
     email: str
     role: Role
+    # True only for a DASHBOARD_DEMO_OPEN_ACCESS fallback identity (an email not in
+    # config/roles.yaml) -- regardless of which role they're currently viewing as.
+    # Lets the frontend show the "View as" switcher only to actual judges, never to
+    # a real legal/editorial/producer user.
+    is_judge: bool = False
 
 
-def get_current_user(authorization: str = Header(...)) -> UserContext:
+def get_current_user(
+    authorization: str = Header(...),
+    x_view_as_role: str | None = Header(None, alias="X-View-As-Role"),
+) -> UserContext:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "expected 'Authorization: Bearer <id_token>'")
     token = authorization.removeprefix("Bearer ")
@@ -57,9 +67,25 @@ def get_current_user(authorization: str = Header(...)) -> UserContext:
 
     role = ROLES.get(email)
     if role is None:
+        # `DASHBOARD_DEMO_OPEN_ACCESS`: an explicit, opt-in escape hatch so hackathon
+        # judges can sign in with their own Google account and get full demo access
+        # (the `judge` role, see config/roles.yaml) without us collecting their
+        # emails ahead of time. Unset in a real deployment, this behaves exactly as
+        # before -- an unrecognized email still 403s.
+        if os.environ.get("DASHBOARD_DEMO_OPEN_ACCESS", "").lower() in ("1", "true"):
+            # Judges can "view as" legal/editorial/producer (X-View-As-Role) to see
+            # the *real* role gate in action -- the effective role becomes that
+            # value everywhere else in this file and in main.py, no special-casing
+            # needed there. With no override, default to full access ("judge").
+            effective_role: Role = "judge"
+            if x_view_as_role in _VIEWABLE_ROLES:
+                effective_role = x_view_as_role
+            return UserContext(email=email, role=effective_role, is_judge=True)
         raise HTTPException(403, f"{email} is not a recognized dashboard user")
 
-    return UserContext(email=email, role=role)
+    # A real allowlisted user's role is never overridable by this header -- "view
+    # as" is a judge-only demo feature, not a general impersonation mechanism.
+    return UserContext(email=email, role=role, is_judge=False)
 
 
 def require_role(*allowed: Role) -> Callable[[UserContext], UserContext]:

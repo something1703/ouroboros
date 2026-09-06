@@ -7,8 +7,23 @@ import { useAuth } from "@/auth/AuthProvider"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import type { ViewableRole } from "@/api/types"
+
+const VIEW_AS_OPTIONS: { value: ViewableRole | "judge"; label: string }[] = [
+  { value: "judge", label: "Full access" },
+  { value: "legal", label: "Legal" },
+  { value: "editorial", label: "Editorial" },
+  { value: "producer", label: "Producer" },
+]
 
 function slugify(title: string): string {
   return title
@@ -79,10 +94,14 @@ function NewProjectForm({ onDone }: { onDone: (projectId: string) => void }) {
 }
 
 export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, viewAsRole, setViewAsRole } = useAuth()
   const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
-  const { data: projects, isLoading } = useQuery({
+  const {
+    data: projects,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["projects"],
     queryFn: listProjects,
   })
@@ -100,8 +119,11 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
             Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="mx-2 my-1 h-7 rounded-md" />
             ))}
-          {!isLoading && projects?.length === 0 && !creating && (
-            <p className="px-3 py-2 text-xs text-sidebar-foreground/60">No projects yet.</p>
+          {isError && (
+            <p className="px-3 py-2 text-sm text-destructive">Couldn't load your projects.</p>
+          )}
+          {!isLoading && !isError && projects?.length === 0 && !creating && (
+            <p className="px-3 py-2 text-sm text-sidebar-foreground/70">No projects yet.</p>
           )}
           {projects?.map((project) => (
             <NavLink
@@ -110,8 +132,8 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
               onClick={onNavigate}
               className={({ isActive }) =>
                 cn(
-                  "block truncate rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                  isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
+                  "block truncate rounded-md px-3 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent",
+                  isActive && "bg-sidebar-accent font-medium",
                 )
               }
             >
@@ -135,7 +157,7 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <Plus className="size-4" />
               New project
@@ -147,15 +169,37 @@ export function LeftNav({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-t border-sidebar-border px-4 py-3">
         <div className="mb-2 flex items-center gap-2">
           <Avatar className="size-7">
-            <AvatarFallback className="font-mono text-[0.65rem]">
+            <AvatarFallback className="text-xs">
               {user.email.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs text-sidebar-foreground">{user.email}</p>
-            <p className="text-[0.7rem] text-sidebar-foreground/60 capitalize">{user.role}</p>
+            <p className="truncate text-sm text-sidebar-foreground">{user.email}</p>
+            {!user.is_judge && (
+              <p className="text-sm text-muted-foreground capitalize">{user.role}</p>
+            )}
           </div>
         </div>
+        {user.is_judge && (
+          <div className="mb-2">
+            <p className="mb-1 text-sm text-muted-foreground">Viewing as</p>
+            <Select
+              value={viewAsRole ?? "judge"}
+              onValueChange={(v) => setViewAsRole(v === "judge" ? null : (v as ViewableRole))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VIEW_AS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <Button variant="ghost" size="sm" className="w-full justify-start" onClick={signOut}>
           Sign out
         </Button>

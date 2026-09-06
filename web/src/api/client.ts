@@ -27,11 +27,20 @@ import type {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL as string
 
 let authToken: string | null = null
+let viewAsRole: string | null = null
 
 // Set by AuthProvider after a successful GIS sign-in / on sign-out. Kept outside
 // React state so plain functions below (not hooks) can attach the bearer token.
 export function setAuthToken(token: string | null): void {
   authToken = token
+}
+
+// Set by AuthProvider when a judge picks a role from the "View as" switcher.
+// `services/dashboard_api/auth.py::get_current_user` only honors this header for a
+// DASHBOARD_DEMO_OPEN_ACCESS fallback identity -- a real legal/editorial/producer
+// user sending it has no effect, so this is safe to always attach.
+export function setViewAsRole(role: string | null): void {
+  viewAsRole = role
 }
 
 export class ApiError extends Error {
@@ -47,6 +56,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string>) }
   if (authToken) headers.Authorization = `Bearer ${authToken}`
+  if (viewAsRole) headers["X-View-As-Role"] = viewAsRole
   if (init?.body) headers["Content-Type"] = "application/json"
 
   const res = await fetch(`${BASE_URL}${path}`, { ...init, headers })

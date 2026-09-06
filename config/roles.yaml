@@ -5,6 +5,16 @@
 # Identity Services sign-in (docs/DECISIONS.md; no GCP Organization exists for classic
 # Cloud IAP -- see the project memory this decision came from), not Cloud IAP.
 #
+# A fourth role, `judge`, is never listed here -- it's assigned automatically by
+# `services/dashboard_api/auth.py::get_current_user` to any signed-in email NOT in
+# this file, but only when the `DASHBOARD_DEMO_OPEN_ACCESS` env var is set on the
+# service. `judge` can do everything `legal` + `editorial` can (run CLEAR/TRUE CUT,
+# override any claim regardless of kind). This exists so hackathon judges can sign
+# in with their own Google account and get full demo access without us knowing
+# their emails ahead of time -- deliberately scoped behind an explicit env flag
+# rather than silently loosening the allowlist, so a real deployment can leave the
+# flag unset and keep the strict allowlist-or-403 behavior this file documents.
+#
 # Edit freely -- these are real test accounts the user gave to exercise the role
 # matrix, not a creative/product decision.
 rvsrathore17@gmail.com: legal

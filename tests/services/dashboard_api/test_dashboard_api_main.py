@@ -378,6 +378,23 @@ def test_override_claim_producer_always_403s(client: TestClient, db_session: Ses
     assert response.status_code == 403
 
 
+def test_override_claim_as_judge_bypasses_the_kind_gate(
+    client: TestClient, db_session: Session
+) -> None:
+    # `judge` (DASHBOARD_DEMO_OPEN_ACCESS-gated, config/roles.yaml) can override a
+    # `kind=legal` claim -- unlike `editorial` above, which 403s on the same claim.
+    _seed_project(db_session)
+    claim = _seed_claim(db_session)  # kind=legal
+    _as("judge@example.com", "judge")
+
+    response = client.patch(
+        f"/projects/demo/claims/{claim.claim_id}",
+        json={"status": "verified", "note": "judge override for demo"},
+    )
+    assert response.status_code == 200
+    assert response.json()["claim"]["status"] == "verified"
+
+
 def test_override_risk_without_existing_risk_409s(client: TestClient, db_session: Session) -> None:
     _seed_project(db_session)
     claim = _seed_claim(db_session)
@@ -459,7 +476,11 @@ def test_get_me_returns_the_signed_in_user(client: TestClient) -> None:
     _as("rvsrathore17@gmail.com", "legal")
     response = client.get("/me")
     assert response.status_code == 200
-    assert response.json() == {"email": "rvsrathore17@gmail.com", "role": "legal"}
+    assert response.json() == {
+        "email": "rvsrathore17@gmail.com",
+        "role": "legal",
+        "is_judge": False,
+    }
 
 
 def test_get_me_requires_auth(client: TestClient) -> None:

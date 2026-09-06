@@ -534,7 +534,12 @@ def trigger_all_monitors(
 
 def _require_override_role(user: UserContext, claim_kind: str) -> None:
     """`legal` overrides `kind=legal` claims, `editorial` overrides `kind=factual` ones
-    (PHASE_08.md §8.1); `producer` is read-only and can never override either."""
+    (PHASE_08.md §8.1); `producer` is read-only and can never override either.
+    `judge` (config/roles.yaml, DASHBOARD_DEMO_OPEN_ACCESS-gated) can override
+    either kind -- a real judge account isn't `legal` xor `editorial`, it needs to
+    demo both override paths."""
+    if user.role == "judge":
+        return
     allowed = {"legal": "legal", "editorial": "factual"}.get(user.role)
     if allowed != claim_kind:
         raise HTTPException(403, f"role {user.role!r} cannot override a {claim_kind!r} claim")

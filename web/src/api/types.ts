@@ -19,12 +19,22 @@ export interface CreateProjectRequest {
   title: string
 }
 
-export type Role = "legal" | "editorial" | "producer"
+// "judge" is DASHBOARD_DEMO_OPEN_ACCESS-gated server-side (services/dashboard_api/
+// auth.py) -- full demo access for anyone signing in with an email not in
+// config/roles.yaml, so hackathon judges don't need to be pre-registered.
+export type Role = "legal" | "editorial" | "producer" | "judge"
 
 export interface UserContext {
   email: string
   role: Role
+  // True only for a DASHBOARD_DEMO_OPEN_ACCESS fallback identity -- gates whether
+  // the "View as" role switcher renders at all (see AuthProvider/LeftNav).
+  is_judge: boolean
 }
+
+/** The three real, gated roles a judge can preview -- excludes "judge" itself,
+ * which means "no override, full access." */
+export type ViewableRole = "legal" | "editorial" | "producer"
 
 export type Cadence = "1h" | "1d" | "1w"
 

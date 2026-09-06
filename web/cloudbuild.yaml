@@ -1,0 +1,15 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - web/Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/web:latest
+      - --build-arg
+      - VITE_API_BASE_URL=https://dashboard-api-492372502792.us-central1.run.app
+      - --build-arg
+      - VITE_GOOGLE_CLIENT_ID=492372502792-58fivlikum2o43klt2gbb9j16fqqr1qb.apps.googleusercontent.com
+      - .
+images:
+  - us-central1-docker.pkg.dev/ouroboros-507503/ouroboros/web:latest

@@ -9,7 +9,11 @@ __pycache__/
 node_modules/
 web/node_modules/
 infra/**/.terraform/
-docs/
-phases/
-fixtures/
+# Root-anchored: an unanchored `docs/` also matched web/src/pages/docs/ at any
+# depth, silently dropping DocsArticlePage.tsx/DocsIndexPage.tsx from every Cloud
+# Build upload and breaking the web/ image build with a "cannot find module" error
+# that never reproduced locally (found live building the web/ hosting image).
+/docs/
+/phases/
+/fixtures/
 .env

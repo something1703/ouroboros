@@ -1,0 +1,42 @@
+---
+combiner: OR
+conditions:
+- conditionThreshold:
+    comparison: COMPARISON_GT
+    thresholdValue: 5.0
+  displayName: '> 5 invalid-signature webhooks in 5 minutes'
+displayName: Webhook 401 spike
+enabled: true
+notificationChannels:
+- projects/ouroboros-507503/notificationChannels/2366343566496464432
+---
+combiner: OR
+conditions:
+- conditionMatchedLog:
+    filter: resource.type="cloud_run_revision" AND jsonPayload.event="budget_80_percent"
+  displayName: budget_80_percent logged
+displayName: Project spend > 80% of budget cap
+enabled: true
+notificationChannels:
+- projects/ouroboros-507503/notificationChannels/2366343566496464432
+---
+combiner: OR
+conditions:
+- conditionThreshold:
+    comparison: COMPARISON_GT
+    thresholdValue: 0.05
+  displayName: 5xx / total request ratio
+displayName: Cloud Run error rate > 5% (any service)
+enabled: true
+notificationChannels:
+- projects/ouroboros-507503/notificationChannels/2366343566496464432
+---
+combiner: OR
+conditions:
+- conditionThreshold:
+    comparison: COMPARISON_GT
+  displayName: undelivered messages on either DLQ pull subscription
+displayName: Dead-letter messages present
+enabled: true
+notificationChannels:
+- projects/ouroboros-507503/notificationChannels/2366343566496464432

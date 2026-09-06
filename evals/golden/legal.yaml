@@ -1,0 +1,261 @@
+# PHASE_09.md §9.1 golden set — 25 legal (CLEAR) claims across the four specialist
+# categories with a real, verifiable spec (music, brand, person, location_artwork;
+# `quote` has no dedicated Task spec yet, so it's excluded here). Hand-labeled by
+# Claude from well-documented, low-ambiguity public facts rather than agent-drafted +
+# human-verified (PHASE_09.md's own suggested process) — see docs/BLOCKERS.md for the
+# human spot-check request this still calls for.
+#
+# `expected` fields are checked against the real specialist's Evidence.output for the
+# matching Parallel Task spec (DATA_MODEL.md §2.1-2.4): booleans are checked exactly,
+# strings are checked as a case-insensitive substring match against the model's own
+# (necessarily free-text) answer.
+
+- id: legal-music-01
+  category: music
+  entity_text: "Happy Birthday to You"
+  claim_text: "A birthday scene features the whole family singing Happy Birthday to You."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 4
+  expected:
+    is_public_domain: true
+
+- id: legal-music-02
+  category: music
+  entity_text: "Auld Lang Syne"
+  claim_text: "A New Year's Eve party scene has guests singing Auld Lang Syne at midnight."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 4
+  expected:
+    is_public_domain: true
+
+- id: legal-music-03
+  category: music
+  entity_text: "Shape of You"
+  claim_text: "A car radio plays Ed Sheeran's Shape of You during a driving scene."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 3
+  expected:
+    composition_rights_holder: "Sony"
+
+- id: legal-music-04
+  category: music
+  entity_text: "Bohemian Rhapsody"
+  claim_text: "A bar jukebox plays Queen's Bohemian Rhapsody."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 2
+  expected:
+    composition_rights_holder: "Sony"
+
+- id: legal-music-05
+  category: music
+  entity_text: "Symphony No. 9 (Beethoven)"
+  claim_text: "An orchestra performs the finale of Beethoven's Symphony No. 9 in a concert hall scene."
+  jurisdictions: [us, de]
+  language: en
+  priority: 4
+  expected:
+    is_public_domain: true
+
+- id: legal-brand-01
+  category: brand
+  entity_text: "Coca-Cola"
+  claim_text: "A Coca-Cola can sits on the kitchen table in the background."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    brand_owner: "Coca-Cola"
+
+- id: legal-brand-02
+  category: brand
+  entity_text: "Pepsi"
+  claim_text: "Una máquina expendedora de Pepsi aparece en el fondo de la escena."
+  jurisdictions: [us, es]
+  language: es
+  priority: 3
+  expected:
+    brand_owner: "PepsiCo"
+
+- id: legal-brand-03
+  category: brand
+  entity_text: "Nike"
+  claim_text: "A character wears a pair of Nike sneakers with the swoosh clearly visible."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    brand_owner: "Nike"
+
+- id: legal-brand-04
+  category: brand
+  entity_text: "Apple"
+  claim_text: "A laptop with a glowing Apple logo sits open on the desk."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    brand_owner: "Apple"
+
+- id: legal-brand-05
+  category: brand
+  entity_text: "McDonald's"
+  claim_text: "The golden arches of a McDonald's are visible outside the diner window."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    brand_owner: "McDonald's"
+
+- id: legal-person-01
+  category: person
+  entity_text: "Mahatma Gandhi"
+  claim_text: "फिल्म में महात्मा गांधी की एक तस्वीर दीवार पर दिखाई गई है।"
+  jurisdictions: [in, gb]
+  language: hi
+  priority: 3
+  expected:
+    is_living: false
+
+- id: legal-person-02
+  category: person
+  entity_text: "Albert Einstein"
+  claim_text: "A framed portrait of Albert Einstein hangs in the professor's office."
+  jurisdictions: [us, de]
+  language: en
+  priority: 3
+  expected:
+    is_living: false
+
+- id: legal-person-03
+  category: person
+  entity_text: "Serena Williams"
+  claim_text: "A poster of Serena Williams hangs in the gym locker room."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    is_living: true
+
+- id: legal-person-04
+  category: person
+  entity_text: "Queen Elizabeth II"
+  claim_text: "A commemorative plate bearing Queen Elizabeth II's portrait sits on the mantelpiece."
+  jurisdictions: [gb]
+  language: en
+  priority: 3
+  expected:
+    is_living: false
+
+- id: legal-person-05
+  category: person
+  entity_text: "Barack Obama"
+  claim_text: "A newspaper front page with a photo of Barack Obama is visible on the newsstand."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    is_living: true
+
+- id: legal-location-01
+  category: location
+  entity_text: "Eiffel Tower"
+  claim_text: "EXT. EIFFEL TOWER - NIGHT. The couple embraces with the tower lit up behind them."
+  jurisdictions: [fr]
+  language: en
+  priority: 3
+  expected:
+    owner_or_custodian: "Paris"
+
+- id: legal-location-02
+  category: location
+  entity_text: "Taj Mahal"
+  claim_text: "दृश्य में ताज महल की एक झलक दिखाई गई है।"
+  jurisdictions: [in]
+  language: hi
+  priority: 3
+  expected:
+    owner_or_custodian: "Archaeological Survey of India"
+
+- id: legal-location-03
+  category: location
+  entity_text: "Buckingham Palace"
+  claim_text: "EXT. BUCKINGHAM PALACE - DAY. Tourists gather at the gates."
+  jurisdictions: [gb]
+  language: en
+  priority: 3
+  expected:
+    owner_or_custodian: "Crown"
+
+- id: legal-location-04
+  category: location
+  entity_text: "The White House"
+  claim_text: "EXT. THE WHITE HOUSE - DAY. A motorcade pulls through the gates."
+  jurisdictions: [us]
+  language: en
+  priority: 1
+  expected:
+    owner_or_custodian: "National Park Service"
+
+- id: legal-location-05
+  category: location
+  entity_text: "Statue of Liberty"
+  claim_text: "EXT. STATUE OF LIBERTY - DUSK. A ferry approaches the island."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    owner_or_custodian: "National Park Service"
+
+- id: legal-artwork-01
+  category: artwork
+  entity_text: "The Starry Night"
+  claim_text: "A framed print of Van Gogh's The Starry Night hangs above the fireplace."
+  jurisdictions: [us, nl]
+  language: en
+  priority: 3
+  expected:
+    artwork_copyright_status: public_domain
+
+- id: legal-artwork-02
+  category: artwork
+  entity_text: "Mona Lisa"
+  claim_text: "A poster of the Mona Lisa is taped to the dorm room wall."
+  jurisdictions: [us, fr]
+  language: en
+  priority: 3
+  expected:
+    artwork_copyright_status: public_domain
+
+- id: legal-artwork-03
+  category: artwork
+  entity_text: "The Persistence of Memory"
+  claim_text: "A reproduction of Dalí's The Persistence of Memory hangs in the gallery scene."
+  jurisdictions: [us, es]
+  language: en
+  priority: 3
+  expected:
+    artwork_copyright_status: protected
+
+- id: legal-artwork-04
+  category: artwork
+  entity_text: "Cloud Gate"
+  claim_text: "The characters take a selfie in front of Cloud Gate ('The Bean') in Millennium Park."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  expected:
+    artwork_copyright_status: protected
+
+- id: legal-artwork-05
+  category: artwork
+  entity_text: "The Scream"
+  claim_text: "A reproduction of Munch's The Scream is used as a prop painting in the museum heist scene."
+  jurisdictions: [us, "no"]
+  language: en
+  priority: 3
+  expected:
+    artwork_copyright_status: public_domain

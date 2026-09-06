@@ -1,0 +1,335 @@
+# PHASE_09.md §9.1 golden set — 25 factual (TRUE CUT) claims across event/statistic/
+# attribution categories. Hand-labeled by Claude from well-documented, low-ambiguity
+# public facts (a few deliberately wrong or nuanced, to test that the pipeline
+# actually corrects/qualifies them rather than rubber-stamping everything
+# "supported") — see docs/BLOCKERS.md for the human spot-check request.
+#
+# `expected.verdict` is checked against the real FactAgent path's Evidence.output
+# (DATA_MODEL.md §2.5/§2.6) exactly. `t_start_ms`/`t_end_ms`/`channel` are synthetic
+# (no real video asset backs these — FactAgent's transcript-window context is simply
+# empty, which the real code path already handles: see `fact.py::_build_context`).
+
+- id: factual-event-01
+  category: event
+  entity_text: "Apollo 11 moon landing"
+  claim_text: "The Apollo 11 moon landing happened in 1969."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 10000
+  t_end_ms: 14000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-02
+  category: event
+  entity_text: "Fall of the Berlin Wall"
+  claim_text: "The Berlin Wall fell in 1989."
+  jurisdictions: [de]
+  language: en
+  priority: 3
+  t_start_ms: 20000
+  t_end_ms: 24000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-03
+  category: event
+  entity_text: "End of World War II"
+  claim_text: "World War II ended in 1945."
+  jurisdictions: [us, gb, de]
+  language: en
+  priority: 3
+  t_start_ms: 30000
+  t_end_ms: 34000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-04
+  category: event
+  entity_text: "Sinking of the Titanic"
+  claim_text: "The Titanic sank in 1912."
+  jurisdictions: [gb, us]
+  language: en
+  priority: 3
+  t_start_ms: 40000
+  t_end_ms: 44000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-05
+  category: event
+  entity_text: "First iPhone release"
+  claim_text: "The first iPhone was released in 2007."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 50000
+  t_end_ms: 54000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-06
+  category: event
+  entity_text: "Chernobyl disaster"
+  claim_text: "The Chernobyl nuclear disaster occurred in 1990."
+  jurisdictions: [de, gb]
+  language: en
+  priority: 1
+  t_start_ms: 60000
+  t_end_ms: 64000
+  channel: narration
+  expected:
+    verdict: contradicted
+
+- id: factual-event-07
+  category: event
+  entity_text: "Great Wall of China visibility from space"
+  claim_text: "The Great Wall of China is visible from space with the naked eye."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 3
+  t_start_ms: 70000
+  t_end_ms: 74000
+  channel: narration
+  expected:
+    verdict: contradicted
+
+- id: factual-event-08
+  category: event
+  entity_text: "Indian independence"
+  claim_text: "भारत को 1947 में ब्रिटिश शासन से स्वतंत्रता मिली।"
+  jurisdictions: [in, gb]
+  language: hi
+  priority: 3
+  t_start_ms: 80000
+  t_end_ms: 84000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-event-09
+  category: event
+  entity_text: "Wright brothers' first flight"
+  claim_text: "The Wright brothers made their first powered flight in 1903 at Kitty Hawk."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 90000
+  t_end_ms: 94000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-01
+  category: statistic
+  entity_text: "Height of Mount Everest"
+  claim_text: "Mount Everest is the tallest mountain on Earth at approximately 8,849 meters."
+  jurisdictions: [np, cn]
+  language: en
+  priority: 3
+  t_start_ms: 100000
+  t_end_ms: 104000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-02
+  category: statistic
+  entity_text: "World population reaching 8 billion"
+  claim_text: "The population of Earth surpassed 8 billion people in 2022."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 110000
+  t_end_ms: 114000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-03
+  category: statistic
+  entity_text: "Sahara Desert size ranking"
+  claim_text: "The Sahara is the largest hot desert in the world."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 120000
+  t_end_ms: 124000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-04
+  category: statistic
+  entity_text: "Usain Bolt's 100m world record"
+  claim_text: "Usain Bolt holds the world record for the 100m sprint at 9.58 seconds."
+  jurisdictions: [us, gb]
+  language: en
+  priority: 3
+  t_start_ms: 130000
+  t_end_ms: 134000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-05
+  category: statistic
+  entity_text: "Amazon rainforest oxygen production myth"
+  claim_text: "The Amazon rainforest produces 50% of the world's oxygen."
+  jurisdictions: [us, "br"]
+  language: en
+  priority: 2
+  t_start_ms: 140000
+  t_end_ms: 144000
+  channel: narration
+  expected:
+    verdict: contradicted
+
+- id: factual-statistic-06
+  category: statistic
+  entity_text: "Pacific Ocean size ranking"
+  claim_text: "The Pacific Ocean is the largest and deepest ocean on Earth."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 150000
+  t_end_ms: 154000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-07
+  category: statistic
+  entity_text: "Speed of light"
+  claim_text: "Light travels at approximately 299,792 kilometers per second."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 160000
+  t_end_ms: 164000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-statistic-08
+  category: statistic
+  entity_text: "Number of bones in the human body"
+  claim_text: "The human body has 206 bones in adulthood."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 170000
+  t_end_ms: 174000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-01
+  category: attribution
+  entity_text: "Einstein and general relativity"
+  claim_text: "Albert Einstein developed the theory of general relativity."
+  jurisdictions: [de, us]
+  language: en
+  priority: 3
+  t_start_ms: 180000
+  t_end_ms: 184000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-02
+  category: attribution
+  entity_text: "Mona Lisa attribution"
+  claim_text: "The Mona Lisa was painted by Leonardo da Vinci."
+  jurisdictions: [fr, it]
+  language: en
+  priority: 3
+  t_start_ms: 190000
+  t_end_ms: 194000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-03
+  category: attribution
+  entity_text: "Edison and the light bulb"
+  claim_text: "Thomas Edison invented the light bulb."
+  jurisdictions: [us]
+  language: en
+  priority: 2
+  t_start_ms: 200000
+  t_end_ms: 204000
+  channel: narration
+  expected:
+    verdict: partially_supported
+
+- id: factual-attribution-04
+  category: attribution
+  entity_text: "Romeo and Juliet authorship"
+  claim_text: "William Shakespeare wrote Romeo and Juliet."
+  jurisdictions: [gb]
+  language: en
+  priority: 3
+  t_start_ms: 210000
+  t_end_ms: 214000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-05
+  category: attribution
+  entity_text: "First person on the Moon"
+  claim_text: "Neil Armstrong was the first person to walk on the Moon."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 220000
+  t_end_ms: 224000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-06
+  category: attribution
+  entity_text: "Marie Curie's Nobel Prizes"
+  claim_text: "Marie Curie ganó el Premio Nobel en Física y Química."
+  jurisdictions: [fr, pl]
+  language: es
+  priority: 3
+  t_start_ms: 230000
+  t_end_ms: 234000
+  channel: narration
+  expected:
+    verdict: supported
+
+- id: factual-attribution-07
+  category: attribution
+  entity_text: "Declaration of Independence signing date"
+  claim_text: "The Declaration of Independence was signed in 1776."
+  jurisdictions: [us]
+  language: en
+  priority: 3
+  t_start_ms: 240000
+  t_end_ms: 244000
+  channel: narration
+  expected:
+    verdict: partially_supported
+
+- id: factual-attribution-08
+  category: attribution
+  entity_text: "Newton's laws of motion"
+  claim_text: "Isaac Newton formulated the three laws of motion."
+  jurisdictions: [gb]
+  language: en
+  priority: 3
+  t_start_ms: 250000
+  t_end_ms: 254000
+  channel: narration
+  expected:
+    verdict: supported

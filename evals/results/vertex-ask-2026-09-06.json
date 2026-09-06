@@ -1,0 +1,8 @@
+{
+  "ask_ouroboros": {
+    "row_count": 15,
+    "question_answering_quality/mean": 4.8,
+    "question_answering_quality/std": 0.7745966692414836
+  },
+  "citation_correctness": 0.7333333333333333
+}

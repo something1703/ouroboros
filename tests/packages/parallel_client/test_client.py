@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+import httpx
+import parallel
 import pytest
 
 from packages.common.errors import ParallelError, ParallelValidationError
@@ -83,6 +85,40 @@ def test_call_status_error_never_retries() -> None:
             status_error=_FakeStatusError,
         )
     assert attempts["n"] == 1
+
+
+def _real_internal_server_error(message: str) -> parallel.InternalServerError:
+    request = httpx.Request("POST", "https://api.parallel.ai/v1/tasks/runs")
+    response = httpx.Response(500, request=request)
+    return parallel.InternalServerError(message, response=response, body=None)
+
+
+def test_call_retries_the_real_parallel_500_by_default() -> None:
+    # PHASE_09.md §9.5: the existing retry tests above all pass an explicit
+    # `retryable_errors=(_FakeRetryable,)` override -- none of them exercise the
+    # *real* default `_RETRYABLE_ERRORS` tuple `run()`/`search()` actually use in
+    # production. This one calls `call()` with no override at all, using a real
+    # `parallel.InternalServerError` (the SDK's real 500 type), confirming the
+    # default policy retries it (not just that a fake stand-in class can be retried).
+    attempts = {"n": 0}
+
+    def flaky() -> str:
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise _real_internal_server_error("real 500, try again")
+        return "ok"
+
+    result = call(flaky, api="test", sku="test.sku")
+    assert result == "ok"
+    assert attempts["n"] == 3
+
+
+def test_call_exhausts_real_parallel_500_and_raises_parallel_error() -> None:
+    def always_500() -> str:
+        raise _real_internal_server_error("real 500, still failing")
+
+    with pytest.raises(ParallelError):
+        call(always_500, api="test", sku="test.sku")
 
 
 def test_call_logs_warnings_without_raising() -> None:

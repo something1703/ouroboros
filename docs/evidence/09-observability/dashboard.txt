@@ -1,0 +1,12 @@
+Dashboard: https://console.cloud.google.com/monitoring/dashboards/builder/2cbcfdf0-a18a-41b3-aaa6-d1572e944262?project=ouroboros-507503
+
+Ouroboros
+
+Widget titles:
+ - Request count per service
+ - 5xx error count per service
+ - Request latency (p95) per service
+ - Re-verification latency (p50/p95), task-completion-event to evidence-written
+ - Monitor events / day
+ - Webhook 401s (invalid signature)
+ - Dead-letter queue depth

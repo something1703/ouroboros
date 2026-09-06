@@ -112,5 +112,29 @@ seed: ## loads fixtures/projects/demo.yaml — idempotent, safe to re-run
 replay-webhook: ## Phase 7.1 — usage: make replay-webhook FIXTURE=monitor_event_1
 	uv run --env-file .env python scripts/replay_webhook.py --fixture $(FIXTURE)
 
-evals: ## Phase 9.2
-	@echo "TODO (Phase 9.2): uv run python evals/run_golden.py && uv run python evals/run_vertex.py"
+evals: ## Phase 9.2 — golden set + Vertex AI Evaluation. Needs docker compose up -d postgres toolbox
+## and alembic upgrade head first; real, budgeted Parallel + Gemini spend (a few dollars).
+	DB_HOST=localhost DB_NAME=ouroboros DB_USER=app DB_PASSWORD=localdev TOOLBOX_MCP_URL=http://localhost:5001 \
+		uv run --env-file .env python evals/run_golden.py
+	DB_HOST=localhost DB_NAME=ouroboros DB_USER=app DB_PASSWORD=localdev TOOLBOX_MCP_URL=http://localhost:5001 \
+		uv run --with "google-cloud-aiplatform[evaluation]" --env-file .env python evals/run_vertex.py
+
+evals-adk: ## Phase 9.2 — adk eval for every ADK eval set (needs seed_eval_fixtures.py + run_golden.py's seed fns first)
+	@for set in claim_triage risk_assessor music_agent brand_agent person_agent location_art_agent fact_agent; do \
+		case "$$set" in \
+			claim_triage) agent=ClaimTriage ;; \
+			risk_assessor) agent=RiskAssessor ;; \
+			music_agent) agent=MusicAgent ;; \
+			brand_agent) agent=BrandAgent ;; \
+			person_agent) agent=PersonAgent ;; \
+			location_art_agent) agent=LocationArtAgent ;; \
+			fact_agent) agent=FactAgent ;; \
+		esac; \
+		echo "=== $$set ($$agent) ==="; \
+		DB_HOST=localhost DB_NAME=ouroboros DB_USER=app DB_PASSWORD=localdev TOOLBOX_MCP_URL=http://localhost:5001 \
+			uv run --with "google-adk[eval]" --env-file .env python -c "\
+import asyncio; \
+from google.adk.evaluation.agent_evaluator import AgentEvaluator; \
+asyncio.run(AgentEvaluator.evaluate(agent_module='agents.ouroboros.agent', eval_dataset_file_path_or_dir='evals/adk/$$set.evalset.json', agent_name='$$agent', num_runs=1))" \
+		|| exit 1; \
+	done

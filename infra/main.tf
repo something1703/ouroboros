@@ -30,6 +30,9 @@ locals {
     # accessible via the Drive API's permissions.create -- Sheets API alone manages
     # the spreadsheet's cells, but setting who can open the file is a Drive API call.
     "drive.googleapis.com",
+    # PHASE_09.md §9.3: deploys infra/firestore.rules (google_firebaserules_ruleset/
+    # _release below) -- Firestore security rules are a Firebase Rules API resource.
+    "firebaserules.googleapis.com",
     "vpcaccess.googleapis.com",
     "servicenetworking.googleapis.com",
   ]
@@ -138,6 +141,14 @@ module "scheduler" {
   depends_on = [module.project_services, module.iam]
 }
 
+module "monitoring" {
+  source             = "./modules/monitoring"
+  project_id         = var.project_id
+  notification_email = "rvsrathore17@gmail.com"
+
+  depends_on = [module.project_services]
+}
+
 # See infra/modules/eventarc/main.tf's header comment: this needs the `ingest` Cloud Run
 # service to already exist, which deploy.yml guarantees by deploying services before
 # running `terraform apply`.
@@ -158,6 +169,29 @@ resource "google_firestore_database" "default" {
   type        = "FIRESTORE_NATIVE"
 
   depends_on = [module.project_services]
+}
+
+# PHASE_09.md §9.3: deny-all client rules -- every real reader/writer here is a
+# backend service account (roles/datastore.user), never a browser/mobile client.
+resource "google_firebaserules_ruleset" "firestore_deny_all" {
+  provider = google-beta
+  project  = var.project_id
+
+  source {
+    files {
+      name    = "firestore.rules"
+      content = file("${path.module}/firestore.rules")
+    }
+  }
+
+  depends_on = [google_firestore_database.default]
+}
+
+resource "google_firebaserules_release" "firestore_deny_all" {
+  provider     = google-beta
+  project      = var.project_id
+  name         = "cloud.firestore"
+  ruleset_name = "projects/${var.project_id}/rulesets/${google_firebaserules_ruleset.firestore_deny_all.name}"
 }
 
 # services/toolbox (Cloud Run, private) is deployed via gcloud in deploy.yml, same

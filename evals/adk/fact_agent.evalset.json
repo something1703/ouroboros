@@ -1,0 +1,243 @@
+{
+  "eval_set_id": "fact_agent",
+  "name": "FactAgent",
+  "description": "PHASE_09.md 9.2 -- 5 cases against evals/golden's real seeded claims (project 'eval-golden-factual'), each verifying FactAgent's first real tool call (list_claims), the same batch-discovery step that precedes its real verify_fact_batch call.",
+  "eval_cases": [
+    {
+      "eval_id": "fact_agent_1",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Verify this batch of claims."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-factual",
+                  "category": "event",
+                  "status": "triaged"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-factual",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "fact_agent_2",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Verify this batch of claims."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-factual",
+                  "category": "statistic",
+                  "status": "triaged"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-factual",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "fact_agent_3",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Verify this batch of claims."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-factual",
+                  "category": "attribution",
+                  "status": "triaged"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-factual",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "fact_agent_4",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Verify this batch of claims."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-factual",
+                  "category": "event",
+                  "status": "triaged"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-factual",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "fact_agent_5",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Verify this batch of claims."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-factual",
+                  "category": "statistic",
+                  "status": "triaged"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-factual",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

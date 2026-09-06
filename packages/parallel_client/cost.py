@@ -51,6 +51,16 @@ def check_budget(session: Session, project_id: str) -> None:
     spent = ProjectRepo.spend(session, project_id)
     project = ProjectRepo.get(session, project_id)
     cap = project.budget_cap_usd if project else Decimal(str(PROJECT_BUDGET_USD_DEFAULT))
+    # PHASE_09.md §9.4's "spend > 80% of cap" alert -- logged here, not just checked,
+    # since this is the one place both real-time-DB-backed callers (reverify_worker)
+    # already call before every priced action.
+    if cap > 0 and spent / cap >= Decimal("0.8"):
+        get_logger(__name__).warning(
+            "budget_80_percent",
+            project_id=project_id,
+            spend_usd=float(spent),
+            cap_usd=float(cap),
+        )
     if spent > cap:
         raise BudgetExceeded(project_id, float(spent), float(cap))
 

@@ -1,0 +1,238 @@
+{
+  "eval_set_id": "ask_ouroboros",
+  "name": "AskOuroboros",
+  "description": "PHASE_09.md 9.2 -- 5 cases, one per real evidence source AskOuroboros can reach for (a ledger claim list/lookup, a private-corpus precedent search, a live Parallel-grounded web question), matching agents/ouroboros/prompts/ask_ouroboros.md's own worked examples.",
+  "eval_cases": [
+    {
+      "eval_id": "ask_ouroboros_ledger_claim",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Is there an existing claim about the Coca-Cola product placement in this project?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "project_id": "eval-golden-legal"
+                },
+                "name": "list_claims"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-legal",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run",
+          "question": "Is there an existing claim about the Coca-Cola product placement in this project?"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "ask_ouroboros_ledger_specific_claim",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What's the status of claim 688bbc2f4c271a8670e7ba79?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "claim_id": "688bbc2f4c271a8670e7ba79"
+                },
+                "name": "get_claim"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-legal",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run",
+          "question": "What's the status of claim 688bbc2f4c271a8670e7ba79?"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "ask_ouroboros_corpus_precedent",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What did we decide about Beatles music rights last time?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "query": "Beatles music rights clearance decision"
+                },
+                "name": "search_private_corpus"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-legal",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run",
+          "question": "What did we decide about Beatles music rights last time?"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "ask_ouroboros_studio_guideline",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What's our studio policy on depicting real living persons?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "query": "studio policy real person depiction"
+                },
+                "name": "search_private_corpus"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-legal",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run",
+          "question": "What's our studio policy on depicting real living persons?"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "ask_ouroboros_live_web",
+      "conversation": [
+        {
+          "invocation_id": "inv1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Is Coca-Cola still an actively registered trademark?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "question": "Is Coca-Cola still an actively registered trademark?"
+                },
+                "name": "ask_grounded"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "ouroboros",
+        "user_id": "eval-user",
+        "state": {
+          "project_id": "eval-golden-legal",
+          "studio_id": "studio-eval",
+          "jurisdictions": [
+            "us",
+            "gb"
+          ],
+          "release_date": "2026-12-01",
+          "run_id": "eval-run",
+          "question": "Is Coca-Cola still an actively registered trademark?"
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

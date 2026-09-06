@@ -1,0 +1,15 @@
+// PHASE_09.md §9.3: deny every client-side read/write. Every real access to Firestore
+// in this project goes through a backend service (packages/ledger/projections.py's
+// Projector, agents/ouroboros/tools/firestore_tools.py) authenticated as its own
+// service account with roles/datastore.user (infra/modules/iam) -- no browser or
+// mobile client ever holds a Firestore SDK credential. This rule set is the explicit,
+// checked-in guarantee of that: even if a client somehow obtained a credential, the
+// rules themselves deny it, not just "nobody currently tries."
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -168,6 +168,9 @@ locals {
       # `_search_engine` resources (AskOuroboros's private corpus) -- same pattern as
       # every role above: CI needs admin on any resource type infra/ manages.
       "roles/discoveryengine.admin",
+      # Phase 9.3 introduces Terraform's first `google_firebaserules_ruleset`/
+      # `_release` resources (infra/firestore.rules) -- same pattern as every role above.
+      "roles/firebaserules.admin",
     ]
   }
 

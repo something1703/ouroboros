@@ -1,0 +1,24 @@
+{
+  "date": "2026-09-06",
+  "legal": {
+    "total": 25,
+    "accuracy": 0.88,
+    "citation_presence": 0.92,
+    "high_confidence_precision": 0.875,
+    "high_confidence_total": 16,
+    "total_cost_usd": 0.6000000000000002,
+    "avg_latency_seconds": 3.2015362666395957,
+    "errors": []
+  },
+  "factual": {
+    "total": 25,
+    "accuracy": 0.96,
+    "citation_presence": 1.0,
+    "high_confidence_precision": 0.9583333333333334,
+    "high_confidence_total": 24,
+    "total_cost_usd": 1.3250000000000004,
+    "avg_latency_seconds": 1.7591597816802096,
+    "errors": []
+  },
+  "table_markdown": "| Metric | Legal | Factual |\n|---|---|---|\n| Field/verdict accuracy | 88% | 96% |\n| Citation presence | 92% | 100% |\n| High-confidence precision | 88% (16 high) | 96% (24 high) |\n| Total cost | $0.600 | $1.325 |\n| Avg latency/claim | 3.2s | 1.8s |\n| Errors | 0 | 0 |"
+}

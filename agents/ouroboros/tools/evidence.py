@@ -14,6 +14,7 @@ from agents.ouroboros.tools import ledger
 from packages.claims.enums import Confidence
 from packages.claims.models import FieldBasis
 from packages.common.ids import new_ulid
+from packages.safety.model_armor import screen
 
 
 def current_cycle(claim_id: str) -> int:
@@ -35,6 +36,15 @@ def write_evidence(
     parallel_run_id: str | None = None,
     processor: str | None = None,
 ) -> None:
+    # AGENTS.md §6.6: every untrusted-text path goes through Model Armor before it's
+    # trusted further -- `content` here is a Parallel Task/Responses result, itself
+    # derived from untrusted web material the model read, so it's screened the same
+    # as ingest/search/extract text, not assumed safe just because an LLM already
+    # touched it. Raises SafetyBlocked on a high-confidence match, which the caller's
+    # own per-claim exception handling (specialist.py/fact.py's `_one()`) already
+    # catches and records as a claim-level `error`, not a batch-wide crash.
+    screen(json.dumps(content), context="task_output")
+
     expected_cycle = current_cycle(claim_id) + 1
     ledger.record_evidence(
         evidence_id=new_ulid(),

@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -140,6 +141,11 @@ def _handle_monitor_event(event: MonitorEventDetected) -> None:
         log.warning("reverify_monitor_event_missing_metadata", metadata=event.metadata)
         return
 
+    # PHASE_09.md §9.4's "monitor events per day" dashboard metric -- the Firestore
+    # event-feed write below (`_projector.event_entry`) is for the UI, not Cloud
+    # Logging, so a log-based metric needs its own explicit log line.
+    log.info("monitor_event_received", claim_id=claim_id, project_id=project_id)
+
     with session_scope() as session:
         claim = ClaimRepo.require(session, claim_id)
         check_budget(session, project_id)
@@ -211,6 +217,15 @@ def _handle_monitor_event(event: MonitorEventDetected) -> None:
 
 
 def _handle_task_completion(event: TaskRunStatusEvent) -> None:
+    # PHASE_09.md §9.4's "re-verification latency" dashboard metric -- timed from this
+    # handler's own entry, not the original webhook receipt: the full chain spans two
+    # separate Pub/Sub deliveries (webhook_receiver -> _handle_monitor_event kicks off
+    # a new Task run; *this* function only runs later, on that Task's own completion
+    # event), and threading the original webhook timestamp through the Task run's own
+    # metadata across that gap wasn't done this pass -- this measures "process a
+    # completion event through to evidence written," a real, still-useful proxy, not
+    # the full webhook-to-evidence span.
+    _start = time.monotonic()
     if event.is_active:
         return  # still running; nothing to do until the terminal event arrives
     claim_id = event.metadata.get("claim_id", "")
@@ -320,6 +335,7 @@ def _handle_task_completion(event: TaskRunStatusEvent) -> None:
         risk_level=risk.level.value,
         changed=changed,
         drift=drift.drift,
+        latency_ms=int((time.monotonic() - _start) * 1000),
     )
 
     if changed and risk.level in (RiskLevel.HIGH, RiskLevel.BLOCKING):

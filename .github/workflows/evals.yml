@@ -1,0 +1,124 @@
+name: evals
+
+# PHASE_09.md §9.2: `adk eval` for every ADK eval set, plus the golden set + Vertex AI
+# Evaluation rubrics (`make evals`). Manual (`workflow_dispatch`) only, not on every
+# push/PR -- every run makes real, budgeted Parallel + Gemini API calls (a few dollars
+# each time), and this repo has no recorded-cassette replay infra yet (PHASE_09.md's own
+# risk section allows a documented fallback when the ideal approach is blocked; see
+# docs/DECISIONS.md for why cassettes were deferred rather than built here).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation — no JSON keys
+
+env:
+  GOOGLE_CLOUD_PROJECT: ouroboros-507503
+  GOOGLE_CLOUD_LOCATION: global
+  OUROBOROS_REGION: us-central1
+  DB_HOST: localhost
+  DB_NAME: ouroboros
+  DB_USER: app
+  DB_PASSWORD: localdev # pragma: allowlist secret — local-only placeholder, matches docker-compose.yml/ci.yml
+  TOOLBOX_MCP_URL: http://localhost:5001
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ouroboros
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: localdev  # pragma: allowlist secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d ouroboros"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/492372502792/locations/global/workloadIdentityPools/github-pool/providers/github-provider  # pragma: allowlist secret
+          service_account: sa-ci-deploy@ouroboros-507503.iam.gserviceaccount.com
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Build + start Toolbox against the CI Postgres
+        # Not a `services:` container -- GitHub Actions service containers need a
+        # pre-pushed registry image, not a local Dockerfile build context. Plain
+        # `docker build` + `docker run` against the same checked-out Dockerfile CI
+        # already has is simpler than pushing a throwaway image first.
+        run: |
+          docker build -f services/toolbox/Dockerfile -t toolbox-ci .
+          docker run -d --network host \
+            -e TOOLBOX_DB_HOST=localhost -e TOOLBOX_DB_PORT=5432 \
+            -e TOOLBOX_DB_NAME=ouroboros -e TOOLBOX_DB_USER=app \
+            -e TOOLBOX_DB_PASSWORD="localdev" `# pragma: allowlist secret -- local-only placeholder, matches docker-compose.yml` \
+            toolbox-ci
+          for _ in $(seq 1 20); do
+            curl -sf http://localhost:5000/ && break || sleep 1
+          done
+
+      - name: Seed fixtures (ClaimTriage/RiskAssessor + golden-set claims)
+        run: |
+          uv run python scripts/seed_eval_fixtures.py
+          uv run python -c "
+          from evals.run_golden import _seed_legal_project, _seed_factual_project
+          _seed_legal_project()
+          _seed_factual_project()
+          "
+
+      - name: ADK evals (real Parallel + Gemini calls, no cassettes yet)
+        # ask_ouroboros.evalset.json exists (evals/adk/) but isn't run here yet:
+        # tool_trajectory_avg_score needs an exact args match, and AskOuroboros's own
+        # tool calls carry model-composed free-text queries that legitimately vary
+        # run to run -- a poor fit for this metric (see docs/DECISIONS.md). The
+        # specialists/ClaimTriage/RiskAssessor calls above all have fixed, enum-like
+        # args and pass reliably.
+        run: |
+          for set in claim_triage risk_assessor music_agent brand_agent person_agent location_art_agent fact_agent; do
+            case "$set" in
+              claim_triage) agent=ClaimTriage ;;
+              risk_assessor) agent=RiskAssessor ;;
+              music_agent) agent=MusicAgent ;;
+              brand_agent) agent=BrandAgent ;;
+              person_agent) agent=PersonAgent ;;
+              location_art_agent) agent=LocationArtAgent ;;
+              fact_agent) agent=FactAgent ;;
+            esac
+            echo "=== $set ($agent) ==="
+            uv run --with "google-adk[eval]" python -c "
+          import asyncio
+          from google.adk.evaluation.agent_evaluator import AgentEvaluator
+          asyncio.run(AgentEvaluator.evaluate(
+              agent_module='agents.ouroboros.agent',
+              eval_dataset_file_path_or_dir='evals/adk/$set.evalset.json',
+              agent_name='$agent',
+              num_runs=1,
+          ))
+          "
+          done
+
+      - name: Golden set + Vertex AI Evaluation
+        run: |
+          uv run python evals/run_golden.py
+          uv run --with "google-cloud-aiplatform[evaluation]" python evals/run_vertex.py

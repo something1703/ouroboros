@@ -149,8 +149,228 @@ risk_set = EvalSet(
     eval_cases=risk_cases,
 )
 
+# --- The four CLEAR specialists + FactAgent ----------------------------------------
+# PHASE_09.md §9.2. Fixture data: evals/golden/legal.yaml + factual.yaml's own claims,
+# seeded via evals/run_golden.py's `_seed_legal_project()`/`_seed_factual_project()`
+# (idempotent, deterministic claim_ids -- Claim.compute_id) -- run one of those (or the
+# whole golden-set run) before `adk eval` against these sets, exactly like
+# scripts/seed_eval_fixtures.py is a prerequisite for claim_triage/risk_assessor above.
+# claim_ids below were captured live from a real seed run (see evals/adk/README.md).
+
+_MUSIC_CLAIMS = [
+    "dfe27032e1e0238056285533",  # pragma: allowlist secret
+    "4884113b230ffcb29a876e35",  # pragma: allowlist secret
+    "fb035fbae4afe9f581637957",  # pragma: allowlist secret
+    "8709732c715a2dacb6ad5540",  # pragma: allowlist secret
+    "0c18458f9d52c472a6cb5b6e",  # pragma: allowlist secret
+]
+_BRAND_CLAIMS = [
+    "688bbc2f4c271a8670e7ba79",  # pragma: allowlist secret
+    "6dbb5a468cb36492afa8db7f",  # pragma: allowlist secret
+    "2cce33f9b0ff157afd943707",  # pragma: allowlist secret
+    "4da95c1e7e4b2e721eb3358b",  # pragma: allowlist secret
+    "8aefa3aa7b592df0c0099e7b",  # pragma: allowlist secret
+]
+_PERSON_CLAIMS = [
+    "f9d132077cfd067aae852dd4",  # pragma: allowlist secret
+    "7e9a41db7a815f474060375d",  # pragma: allowlist secret
+    "bd6b2c7cc397150aa5b9e796",  # pragma: allowlist secret
+    "9543d95bed4dacccbb7577bf",  # pragma: allowlist secret
+    "88587a733ef0e99518309f32",  # pragma: allowlist secret
+]
+_LOCATION_ARTWORK_CLAIMS = [
+    "e4435c58f4bdfa38fef32a7f",  # location -- pragma: allowlist secret
+    "57f3f728f72d1b7cc907098c",  # location -- pragma: allowlist secret
+    "d9a1d28f84f69425c90c8afb",  # location -- pragma: allowlist secret
+    "c9669620b98c0a5544981c53",  # artwork -- pragma: allowlist secret
+    "77cf55f98ea8c022ba02ca90",  # artwork -- pragma: allowlist secret
+]
+_FACTUAL_CLAIMS = [
+    "3dd37f3c560aa933759f664a",  # pragma: allowlist secret
+    "65784df8a56b8c80ea925304",  # pragma: allowlist secret
+    "b68d75587b61f167e6e2ce31",  # pragma: allowlist secret
+    "f8f0317f8a7d5925bd7bfd44",  # pragma: allowlist secret
+    "c4f738c2e61cb2cf188517a8",  # pragma: allowlist secret
+]
+
+
+def _specialist_case(eval_id: str, project_id: str, category: str) -> EvalCase:
+    # Asserts `list_claims(project_id=..., category=..., status="triaged")` -- the
+    # specialist's real first move is to discover its own batch, not receive claim_ids
+    # handed to it in the user turn (that's RiskAssessor's own, different, flexible
+    # framing -- see `_risk_case` above). Found live, across 6 repeated real runs: a
+    # specialist's own list_claims call is exact-match reliable on all three of these
+    # keys every time (unlike ClaimTriage's bare `project_id`-only call, which handles
+    # every category and doesn't filter this tightly) -- ADK's trajectory scorer
+    # requires full dict equality even under ANY_ORDER matching (only call *order* is
+    # forgiving, not a given call's own args), so this had to be nailed down exactly
+    # rather than guessed from a single run.
+    return EvalCase(
+        eval_id=eval_id,
+        conversation=[
+            Invocation(
+                invocation_id="inv1",
+                user_content=_content("Verify this batch of claims."),
+                intermediate_data=IntermediateData(
+                    tool_uses=[
+                        _fc(
+                            "list_claims",
+                            project_id=project_id,
+                            category=category,
+                            status="triaged",
+                        )
+                    ]
+                ),
+            )
+        ],
+        session_input=_session(project_id),
+    )
+
+
+def _specialist_set(
+    eval_set_id: str,
+    name: str,
+    tool_name: str,
+    categories: list[str],
+    project_id: str,
+) -> EvalSet:
+    """`categories` has one entry per case -- usually all the same value (one fixed
+    category per specialist), except LocationArtAgent, which really does handle two
+    (`location` and `artwork` both route to `legal_location_artwork`)."""
+    cases = [
+        _specialist_case(f"{eval_set_id}_{i}", project_id, category)
+        for i, category in enumerate(categories, start=1)
+    ]
+    return EvalSet(
+        eval_set_id=eval_set_id,
+        name=name,
+        description=(
+            f"PHASE_09.md 9.2 -- {len(cases)} cases against evals/golden's real seeded "
+            f"claims (project '{project_id}'), each verifying {name}'s first real tool "
+            f"call (list_claims), the same batch-discovery step that precedes its real "
+            f"{tool_name} call."
+        ),
+        eval_cases=cases,
+    )
+
+
+music_set = _specialist_set(
+    "music_agent",
+    "MusicAgent",
+    "verify_music_batch",
+    ["music"] * len(_MUSIC_CLAIMS),
+    "eval-golden-legal",
+)
+brand_set = _specialist_set(
+    "brand_agent",
+    "BrandAgent",
+    "verify_brand_batch",
+    ["brand"] * len(_BRAND_CLAIMS),
+    "eval-golden-legal",
+)
+person_set = _specialist_set(
+    "person_agent",
+    "PersonAgent",
+    "verify_person_batch",
+    ["person"] * len(_PERSON_CLAIMS),
+    "eval-golden-legal",
+)
+location_art_set = _specialist_set(
+    "location_art_agent",
+    "LocationArtAgent",
+    "verify_location_artwork_batch",
+    ["location", "location", "location", "artwork", "artwork"],
+    "eval-golden-legal",
+)
+fact_set = _specialist_set(
+    "fact_agent",
+    "FactAgent",
+    "verify_fact_batch",
+    ["event", "statistic", "attribution", "event", "statistic"],
+    "eval-golden-factual",
+)
+
+# --- AskOuroboros --------------------------------------------------------------------
+# PHASE_09.md §9.2. One case per real tool AskOuroboros can reach for
+# (ask_ouroboros.md's own worked examples: ledger claim, corpus doc, live web), plus two
+# more exercising the ledger path against different claims -- 5 cases total. Session
+# state carries `question` (agents/ouroboros/ask/ask_ouroboros.py::_instruction reads
+# ctx.state["question"]), matching how `initialize_run` populates it for a real "ask"-
+# mode run (agents/ouroboros/tools/session_tools.py).
+
+_ASK_CASES = [
+    (
+        "ask_ouroboros_ledger_claim",
+        "Is there an existing claim about the Coca-Cola product placement in this project?",
+        "list_claims",
+        {"project_id": "eval-golden-legal"},
+    ),
+    (
+        "ask_ouroboros_ledger_specific_claim",
+        f"What's the status of claim {_BRAND_CLAIMS[0]}?",
+        "get_claim",
+        {"claim_id": _BRAND_CLAIMS[0]},
+    ),
+    (
+        "ask_ouroboros_corpus_precedent",
+        "What did we decide about Beatles music rights last time?",
+        "search_private_corpus",
+        {"query": "Beatles music rights clearance decision"},
+    ),
+    (
+        "ask_ouroboros_studio_guideline",
+        "What's our studio policy on depicting real living persons?",
+        "search_private_corpus",
+        {"query": "studio policy real person depiction"},
+    ),
+    (
+        "ask_ouroboros_live_web",
+        "Is Coca-Cola still an actively registered trademark?",
+        "ask_grounded",
+        {"question": "Is Coca-Cola still an actively registered trademark?"},
+    ),
+]
+
+ask_cases = [
+    EvalCase(
+        eval_id=eval_id,
+        conversation=[
+            Invocation(
+                invocation_id="inv1",
+                user_content=_content(question),
+                intermediate_data=IntermediateData(tool_uses=[_fc(tool_name, **tool_args)]),
+            )
+        ],
+        session_input=_session("eval-golden-legal", question=question),
+    )
+    for eval_id, question, tool_name, tool_args in _ASK_CASES
+]
+
+ask_set = EvalSet(
+    eval_set_id="ask_ouroboros",
+    name="AskOuroboros",
+    description=(
+        "PHASE_09.md 9.2 -- 5 cases, one per real evidence source AskOuroboros can "
+        "reach for (a ledger claim list/lookup, a private-corpus precedent search, a "
+        "live Parallel-grounded web question), matching "
+        "agents/ouroboros/prompts/ask_ouroboros.md's own worked examples."
+    ),
+    eval_cases=ask_cases,
+)
+
+
 if __name__ == "__main__":
-    for name, eval_set in (("claim_triage", triage_set), ("risk_assessor", risk_set)):
+    all_sets = (
+        ("claim_triage", triage_set),
+        ("risk_assessor", risk_set),
+        ("music_agent", music_set),
+        ("brand_agent", brand_set),
+        ("person_agent", person_set),
+        ("location_art_agent", location_art_set),
+        ("fact_agent", fact_set),
+        ("ask_ouroboros", ask_set),
+    )
+    for name, eval_set in all_sets:
         path = _EVALS_DIR / f"{name}.evalset.json"
         path.write_text(
             json.dumps(eval_set.model_dump(mode="json", exclude_none=True), indent=2) + "\n"

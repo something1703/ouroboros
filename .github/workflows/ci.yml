@@ -64,6 +64,23 @@ jobs:
       - name: Test (offline — recorded fixtures only)
         run: uv run pytest -m "not live"
 
+      - name: Dependency audit (pip-audit)
+        # PHASE_09.md §9.3. Advisory, not a build-breaker: a hackathon-timeline repo
+        # can't block CI on every transitive advisory the day it's disclosed, but the
+        # report belongs in every run's logs, not nowhere.
+        run: uv run --with pip-audit pip-audit --desc || true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Dependency audit (npm audit)
+        working-directory: web
+        run: |
+          npm install --package-lock-only
+          npm audit --audit-level=high || true
+
   terraform:
     # Only on PRs: a push to main also triggers deploy.yml's terraform apply
     # against the same GCS-backed state, and both jobs starting at once was

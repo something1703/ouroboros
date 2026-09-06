@@ -56,4 +56,34 @@ Format per entry:
 **Status:** partially resolved (2026-09-06) — the Client ID itself now exists and is wired into both `services/dashboard_api` and `web/`. Live-tested the Phase 8.2 frontend's sign-in screen against a headless Chromium at `http://localhost:5173` (`docs/DECISIONS.md` #109): the page renders correctly, but the real GIS script logs `[GSI_LOGGER]: The given origin is not allowed for the given client ID` — `http://localhost:5173` isn't yet in this Client ID's **Authorized JavaScript origins** list, so clicking "Sign in with Google" would fail even locally, not just in production. **Still need from human:** add `http://localhost:5173` (Console → APIs & Services → Credentials → this Client ID → Authorized JavaScript origins) so local dev sign-in works at all, then add the real deployed web app's origin later when it exists. Separately: confirm `rvsrathore17@gmail.com`, `ujjwaltyagi9605@gmail.com`, `iamrudra1703@gmail.com` are all added as **test users** on the OAuth consent screen (External + Testing publishing status restricts sign-in to that list) — noted when the Client ID was first created but not yet confirmed done.
 
 ---
+## [PHASE 9.1] Golden-set labels need a human spot-check            (opened: 2026-09-06 15:20 IST)
+**Tried:** Hand-authored `evals/golden/legal.yaml` (25 claims) and `evals/golden/factual.yaml`
+(25 claims) from well-documented public facts (composition rights holders, brand owners,
+living/deceased status, public-domain status, well-known historical events/statistics/
+attributions — several deliberately wrong or nuanced, to test correction rather than
+rubber-stamping). Ran the real specialist code paths (`verify_batch`/`verify_fact_batch`,
+real Parallel calls) against them: legal scored 92% field accuracy / 94% high-confidence
+precision, factual scored 88% verdict accuracy / 88% high-confidence precision (just under
+the 90% acceptance bar) — see `docs/evidence/09-golden.md` for the full table.
+**Error / gap:** Per-claim inspection of every miss (5 total: 2 legal, 3 factual) suggests
+several are golden-set labeling imprecision, not real system errors — e.g. `legal-music-04`
+expected "Sony" as Bohemian Rhapsody's composition rights holder, but the system correctly
+named "EMI Glenwood Music Corp." (an EMI Music Publishing catalog entity now owned by Sony,
+just not literally titled "Sony"); `factual-attribution-07` expected "partially_supported"
+for "the Declaration of Independence was signed in 1776" (nitpicking the July 4 adoption vs.
+August 2 signing date), but the system called it "supported," which is arguably the more
+defensible reading since the claim only asserts the year. This is exactly the disagreement
+class PHASE_09.md's own risk section anticipates ("agent drafts labels ... human spot-checks
+20, disagreements resolved by the human") — I hand-labeled these directly instead of a
+separate draft-then-verify pass, so no second opinion has checked my labels yet.
+**Need from human:** Spot-check 20 of the 50 golden cases (a good starting set: the 5 with
+misses above, plus 15 more spanning each category) against `evals/golden/{legal,factual}.yaml`
+and the real system output in `evals/results/2026-09-06.json` / the local ledger (`claims`/
+`evidence` tables under project `eval-golden-legal`/`eval-golden-factual`). Tell me which
+`expected` values to correct, if any — I'll update the YAML and re-run
+`evals/run_golden.py` (idempotent, ~$2 in real Parallel spend) to get a corrected score.
+**Status:** open — not blocking (both domains already clear their headline acceptance bar
+except factual's high-confidence precision, 88% vs. 90%), proceeding to 9.2 while awaiting.
+
+---
 All of §A (A1–A6) resolved 2026-09-03: project `ouroboros-507503`, IAM owner confirmed, region `us-central1`, Parallel API key stored in Secret Manager, repo URL supplied, BYOK decided. See `docs/DECISIONS.md` #015.

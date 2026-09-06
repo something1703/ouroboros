@@ -1,0 +1,21 @@
+---
+filter: resource.type="cloud_run_revision" AND resource.labels.service_name="reverify-worker"
+  AND jsonPayload.event="monitor_event_received"
+metricDescriptor:
+  metricKind: DELTA
+  valueType: INT64
+name: monitor_events_count
+---
+filter: resource.type="cloud_run_revision" AND resource.labels.service_name="reverify-worker"
+  AND jsonPayload.event="reverify_complete"
+metricDescriptor:
+  metricKind: DELTA
+  valueType: DISTRIBUTION
+name: reverify_latency_ms
+---
+filter: resource.type="cloud_run_revision" AND resource.labels.service_name="webhook-receiver"
+  AND jsonPayload.event="webhook_signature_invalid"
+metricDescriptor:
+  metricKind: DELTA
+  valueType: INT64
+name: webhook_401_count

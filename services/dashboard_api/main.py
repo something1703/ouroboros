@@ -11,13 +11,14 @@ from __future__ import annotations
 import base64
 import json
 import os
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 import google.auth
 import google.auth.transport.requests as gauth_requests
 import google.cloud.storage as storage
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -28,7 +29,7 @@ from packages.claims.enums import ClaimCategory, RiskLevel, VerificationStatus
 from packages.claims.models import Asset, Claim, Evidence, Project, Risk, Segment, VerificationEvent
 from packages.common.errors import Conflict, NotFound
 from packages.common.logging import get_logger
-from packages.common.tracing import configure_tracing, instrument_fastapi
+from packages.common.tracing import configure_tracing, flush_tracing, instrument_fastapi
 from packages.exports.clearance_sheet import export_clearance_sheet
 from packages.exports.eo_pdf import generate_eo_pack
 from packages.exports.factcheck_pdf import generate_factcheck_report
@@ -54,6 +55,25 @@ log = get_logger(__name__)
 
 app = FastAPI(title="Ouroboros Dashboard API")
 instrument_fastapi(app)
+
+
+@app.middleware("http")
+async def _flush_tracing_after_response(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    # PHASE_09.md §9.4: found live -- unlike ingest/webhook_receiver/reverify_worker
+    # (each a single message-handler that already calls flush_tracing() once at the
+    # end), dashboard_api has many endpoints and never called it anywhere, so every
+    # one of its spans (FastAPIInstrumentor auto-instruments every request) was
+    # silently dropped by Cloud Run's CPU-freeze-between-requests behavior
+    # (packages/common/tracing.py::flush_tracing's own docstring) -- confirmed by a
+    # real Cloud Trace query over this project returning zero traces despite heavy
+    # real dashboard_api traffic all session. A middleware covers every route in one
+    # place instead of adding a call to each handler individually.
+    response = await call_next(request)
+    flush_tracing()
+    return response
+
 
 # Phase 8.2: web/ calls this API from a different origin (localhost:5173 in dev, the
 # deployed web app's own origin once known) -- browsers block that without CORS

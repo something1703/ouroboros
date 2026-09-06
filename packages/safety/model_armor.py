@@ -77,7 +77,19 @@ def screen(text: str, context: ScreenContext) -> ScreenResult:
         pi = filter_result.pi_and_jailbreak_filter_result
         if pi.match_state == match_found:
             detected.append(filter_name)
-            if pi.confidence_level == modelarmor_v1.DetectionConfidenceLevel.HIGH:
+            # PHASE_09.md §9.3's red-team suite found live: only 1 of 10 realistic
+            # injection techniques (system-prompt exfiltration, fake control tokens,
+            # base64/homoglyph obfuscation, DAN-style roleplay, authority-impersonation
+            # commands, ...) actually reached HIGH confidence against the real deployed
+            # template -- the other 9 all landed at MEDIUM_AND_ABOVE and would have
+            # sailed through as merely "flagged." None of this project's own clean
+            # production-text tests ever produce a pi_and_jailbreak match at all (not
+            # even LOW), so blocking on MEDIUM_AND_ABOVE too — not just HIGH — closes
+            # that gap without touching the separate, still-flag-only SDP/PII policy.
+            if pi.confidence_level in (
+                modelarmor_v1.DetectionConfidenceLevel.HIGH,
+                modelarmor_v1.DetectionConfidenceLevel.MEDIUM_AND_ABOVE,
+            ):
                 hard_block = True
             continue
 

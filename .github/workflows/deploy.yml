@@ -78,7 +78,7 @@ jobs:
           gcloud run deploy dashboard-api --region="$OUROBOROS_REGION" \
             --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/dashboard-api:latest" \
             --service-account="sa-dashboard-api@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},OUROBOROS_REGION=${OUROBOROS_REGION},DB_HOST=${DB_HOST},DB_PORT=5432,DB_NAME=ouroboros,DB_USER=app,INTAKE_BUCKET=${INTAKE_BUCKET},ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET},AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME},AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID},SELF_BASE_URL=${SELF_BASE_URL},CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}" \
+            --set-env-vars="^#^GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}#OUROBOROS_REGION=${OUROBOROS_REGION}#DB_HOST=${DB_HOST}#DB_PORT=5432#DB_NAME=ouroboros#DB_USER=app#INTAKE_BUCKET=${INTAKE_BUCKET}#ARTIFACTS_BUCKET=${ARTIFACTS_BUCKET}#AGENT_ENGINE_RESOURCE_NAME=${AGENT_ENGINE_RESOURCE_NAME}#AUTO_RUN_AFTER_INGEST=${AUTO_RUN_AFTER_INGEST}#GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}#SELF_BASE_URL=${SELF_BASE_URL}#CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}#DASHBOARD_DEMO_OPEN_ACCESS=${DASHBOARD_DEMO_OPEN_ACCESS}" \
             --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
             --allow-unauthenticated --vpc-connector="$VPC_CONNECTOR" \
             --vpc-egress=private-ranges-only --memory=1Gi \
@@ -116,9 +116,21 @@ jobs:
           # the expected `audience` for /internal/* routes' own identity-token check
           # now that the whole service is --allow-unauthenticated (docs/DECISIONS.md).
           SELF_BASE_URL: https://dashboard-api-492372502792.us-central1.run.app
-          # Phase 8.2: web/'s origin(s), so its CORS preflight succeeds -- defaults to
-          # local dev only until a real production web app URL exists to set here.
+          # Phase 8.2: web/'s origin(s), so its CORS preflight succeeds. Set as a repo
+          # variable (not hardcoded here) since it's comma-joined and genuinely
+          # multi-valued (local dev + the real deployed web app) -- found live
+          # (docs/DECISIONS.md #125): this step's own --set-env-vars used to silently
+          # reset it back to the localhost-only fallback on every CI deploy, because
+          # the vars.CORS_ALLOWED_ORIGINS repo variable had never actually been set to
+          # anything, undoing a same-session manual `gcloud run services update` fix
+          # the moment CI next ran.
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS || 'http://localhost:5173' }}
+          # Phase 10 (docs/DECISIONS.md #125): DASHBOARD_DEMO_OPEN_ACCESS-gated judge
+          # role, so hackathon judges can sign in with any Google account. Off by
+          # default (empty, same falsy check auth.py's get_current_user uses) -- a
+          # real non-hackathon deployment sets no repo variable and keeps the original
+          # strict allowlist-or-403 behavior.
+          DASHBOARD_DEMO_OPEN_ACCESS: ${{ vars.DASHBOARD_DEMO_OPEN_ACCESS || '' }}
 
       - name: Build + deploy toolbox-public
         run: |

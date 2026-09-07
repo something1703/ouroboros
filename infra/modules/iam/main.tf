@@ -171,6 +171,17 @@ locals {
       # Phase 9.3 introduces Terraform's first `google_firebaserules_ruleset`/
       # `_release` resources (infra/firestore.rules) -- same pattern as every role above.
       "roles/firebaserules.admin",
+      # Phase 9.4's monitoring module (infra/modules/monitoring/) introduces
+      # Terraform's first `google_monitoring_dashboard`/`_alert_policy`/
+      # `_notification_channel` and `google_logging_metric` resources -- same
+      # pattern as every role above: found live in CI's `deploy` run once
+      # `terraform-apply` finally reached this module for the first time
+      # (`403: The caller does not have permission` updating the dashboard).
+      # `logging.configWriter` covers the log-based metrics specifically --
+      # a Logging API resource, not a Monitoring one, despite living in the
+      # same Terraform module.
+      "roles/monitoring.editor",
+      "roles/logging.configWriter",
     ]
   }
 

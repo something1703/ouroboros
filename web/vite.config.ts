@@ -11,4 +11,12 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    // Lets DocsArticlePage import the repo-root ouroboros_architecture.mermaid
+    // directly (via a `?raw` import) as its single source of truth, rather than a
+    // hand-copied string that could silently drift from the file README.md embeds.
+    fs: {
+      allow: [path.resolve(import.meta.dirname, '..')],
+    },
+  },
 })

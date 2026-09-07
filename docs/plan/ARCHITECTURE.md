@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Ouroboros system architecture
 
-This is the binding architecture. Phases implement it; they do not redesign it. See `ouroboros_architecture.mermaid` for the diagram.
+This is the binding architecture. Phases implement it; they do not redesign it. See `../../ouroboros_architecture.mermaid` (repo root — also embedded live in `README.md` and rendered on the site at `/docs/architecture`) for the diagram.
 
 ---
 
@@ -76,7 +76,7 @@ Deterministic pipelines are `SequentialAgent`/`ParallelAgent`; LLM judgment live
 |---|---|
 | Cloud Run `dashboard_api` (FastAPI) | Project/claim/evidence endpoints; exports; proxies AskOuroboros to Agent Engine; SSE for Task progress. |
 | Cloud Run `web` (React) | Script viewer with risk heatmap; video timeline with claim markers; live monitor feed; Reality Drift; role-aware views. |
-| Identity-Aware Proxy | Google sign-in; IAM group → app role (`legal`, `editorial`, `producer`). |
+| Google Identity Services | Google sign-in; email allowlist → app role (`legal`, `editorial`, `producer`, open-access `judge`). Replaces the originally-planned Identity-Aware Proxy — this project's GCP project has no Organization, and `gcloud iap oauth-brands create` requires one. |
 | Exports | E&O evidence pack (PDF, per claim, citations + history); clearance log → Google Sheets; fact-check report (PDF). |
 | Slack | High-risk monitor events via Parallel's Slack integration or our webhook. |
 | Cloud Logging / Trace | Structured logs; one trace per claim verification. |
@@ -108,7 +108,7 @@ PDF → GCS → Eventarc → ingest
 | Latency (demo) | Ingest of a 120-page PDF < 3 min. First evidence visible < 2 min after ingest. Full CLEAR pass on 150 claims < 25 min (core-fast, 10-way concurrency). |
 | Cost | Per-project cap enforced in code; default $10 Parallel. |
 | Resilience | Any single Parallel or Gemini failure marks the claim `verification_status=error` with the message; never blocks other claims. |
-| Security | No secrets in code/logs/URLs; webhook signature verification; Model Armor on all untrusted text; IAP on UI; least-privilege SAs (one per service). |
+| Security | No secrets in code/logs/URLs; webhook signature verification; Model Armor on all untrusted text; GIS sign-in + server-enforced role gate on the UI; least-privilege SAs (one per service). |
 | Observability | Every claim has a trace; every Parallel call has a `cost_events` row; dashboard shows spend. |
 | Reproducibility | `make deploy ENV=dev` from a clean checkout stands up the whole system with Terraform. |
 

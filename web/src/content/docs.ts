@@ -9,7 +9,7 @@ export type Block =
   | { kind: "lede"; text: string }
   | { kind: "p"; text: string }
   | { kind: "h"; text: string }
-  | { kind: "figure"; id: "loop" | "cadence"; caption?: string }
+  | { kind: "figure"; id: "loop" | "cadence" | "system"; caption?: string }
   | { kind: "tree"; caption?: string; lines: { depth: number; name: string; note?: string }[] }
   /** A decision, in the shape decisions are actually made: what we took, what we
    *  turned down, and the reason — not a feature bullet. */
@@ -219,6 +219,13 @@ export const DOCS: DocEntry[] = [
         kind: "p",
         text: "This is verified end-to-end from a job with no VPC connector, which is the point: the path in is deliberately narrow enough to hand to an external system.",
       },
+
+      { kind: "h", text: "The whole system, one diagram" },
+      {
+        kind: "p",
+        text: "This is the planning-time architecture diagram, the same one the repository's README embeds — every service, every Google Cloud and Parallel API, and how they actually connect. Solid nodes are built and live; the dashed ones (Lyria remediation, a fictional-brand mockup, Gemini Live, and agent-to-agent handoff) were Phase 10 stretch goals that were never attempted, kept on the diagram rather than deleted so the gap between planned and shipped stays visible rather than quietly edited away.",
+      },
+      { kind: "figure", id: "system" },
     ],
   },
 

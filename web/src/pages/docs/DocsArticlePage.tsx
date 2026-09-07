@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { Link, Navigate, useParams } from "react-router-dom"
 import { CadenceDial } from "@/components/marketing/CadenceDial"
 import { LoopDiagram, LoopTrack } from "@/components/marketing/LoopDiagram"
 import { DOCS, getDocBySlug, type Block } from "@/content/docs"
 import { cn } from "@/lib/utils"
+
+// Lazy: mermaid's runtime (plus every diagram-type chunk it can render) is several
+// hundred KB. Eagerly importing it would put that weight on every route in the
+// app, for a diagram that renders on exactly one docs sub-page.
+const MermaidDiagram = lazy(() =>
+  import("@/components/marketing/MermaidDiagram").then((m) => ({ default: m.MermaidDiagram })),
+)
 
 /** Stable id for a heading, so the contents rail can link to it. */
 const slugify = (text: string) =>
@@ -22,6 +29,14 @@ function Figure({ block }: { block: Extract<Block, { kind: "figure" }> }) {
             <LoopTrack />
           </div>
         </>
+      ) : block.id === "system" ? (
+        <Suspense
+          fallback={
+            <div className="h-[420px] animate-pulse rounded-md border border-border bg-card" />
+          }
+        >
+          <MermaidDiagram />
+        </Suspense>
       ) : (
         <CadenceDial />
       )}

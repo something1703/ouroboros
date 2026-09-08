@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 // The master architecture diagram. One authored SVG, used twice: as the landing
 // page's scroll instrument (activeStage tracks the reader) and as the docs'
 // architecture figure (activeStage undefined -> every stage lit).
@@ -85,6 +87,7 @@ export function LoopDiagram({
   className?: string
 }) {
   const lit = (i: number) => activeStage === undefined || activeStage === i
+  const [motionOK] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches)
 
   return (
     <svg
@@ -95,6 +98,29 @@ export function LoopDiagram({
     >
       {/* the track everything sits on */}
       <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--border)" strokeWidth={1.5} />
+
+      {/* A claim riding the ring, continuously. The product's one non-negotiable
+          claim is that the loop does not stop; a static ring quietly says the
+          opposite, so the motion here is the argument, not decoration. */}
+      {motionOK ? (
+        <circle r={5} fill="var(--brand)">
+          <animateMotion dur="9s" repeatCount="indefinite" rotate="auto">
+            <mpath href="#loop-track" />
+          </animateMotion>
+          <animate
+            attributeName="opacity"
+            values="0.35;1;0.35"
+            dur="3s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      ) : null}
+      <path
+        id="loop-track"
+        d={`M${CX},${CY - R} A${R},${R} 0 1 1 ${CX - 0.01},${CY - R} Z`}
+        fill="none"
+        stroke="none"
+      />
 
       {/* arcs between consecutive stages; the one arriving at the active stage lights up */}
       {ANGLES.map((deg, i) => {

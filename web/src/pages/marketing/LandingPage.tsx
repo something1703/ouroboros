@@ -3,6 +3,8 @@ import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { getPublicShowcaseMetrics } from "@/api/client"
 import { LOOP_STAGES, LoopDiagram, LoopTrack } from "@/components/marketing/LoopDiagram"
+import { ProjectorBeam } from "@/components/marketing/ProjectorBeam"
+import { SystemSchematic } from "@/components/marketing/SystemSchematic"
 import { Button } from "@/components/ui/button"
 
 // Each stage carries a measured fact, not just a description. The earlier version
@@ -107,23 +109,53 @@ export function LandingPage() {
 
   return (
     <div>
-      <section className="mx-auto max-w-6xl px-6 pt-20 pb-24 lg:pt-32">
-        <h1 className="max-w-[16ch] font-display text-[clamp(2.75rem,7vw,5.5rem)] leading-[1.02] text-foreground">
+      <section className="mx-auto max-w-6xl px-6 pt-14 pb-16 lg:pt-20">
+        <p className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+          A deployed system — 7 Cloud Run services, Vertex AI Agent Engine, Parallel's research APIs
+        </p>
+        <h1 className="mt-4 max-w-[17ch] font-display text-[clamp(2.5rem,6vw,5rem)] leading-[1.02] text-foreground">
           Research that feeds itself.
         </h1>
-        <p className="mt-8 max-w-[54ch] text-xl leading-relaxed text-foreground/90">
-          A clearance memo is true the day it is written and quietly less true every day after.
-          Ouroboros keeps re-checking a film's claims against the live world — and tightens how
-          often it looks as the release date closes in.
+        <p className="mt-6 max-w-[56ch] text-xl leading-relaxed text-foreground/90">
+          Ouroboros ingests a script or a cut, has ADK agents verify every legal and factual claim it
+          makes against the live web through Parallel, then keeps re-checking — on a cadence that
+          tightens as release closes in — instead of producing a clearance report that goes stale the
+          day after it's written.
         </p>
-        <div className="mt-10 flex flex-wrap items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <Button asChild size="lg">
             <Link to="/app">Open the dashboard</Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link to="/docs/approach">How we approached it</Link>
+            <Link to="/docs/architecture">See the architecture</Link>
           </Button>
         </div>
+
+        <div className="mt-14 border-t border-border pt-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <p className="text-sm text-muted-foreground">
+              The actual deployed system.{" "}
+              <span className="hidden sm:inline">Move your cursor over it.</span>
+              <span className="sm:hidden">Scroll to see all of it.</span>
+            </p>
+            <p className="hidden font-mono text-xs text-muted-foreground sm:block">
+              hover a subsystem
+            </p>
+          </div>
+          {/* A 20-node schematic has no legible size below ~760px -- scrolls at a
+              fixed, always-readable width instead of shrinking to a blur, the same
+              rule the docs' mermaid diagram already follows for wide content. */}
+          <div className="mt-4 overflow-x-auto">
+            <ProjectorBeam
+              radius={260}
+              className="block min-w-[760px]"
+              reveal={<SystemSchematic lit className="w-full" />}
+            >
+              <SystemSchematic className="w-full" />
+            </ProjectorBeam>
+          </div>
+        </div>
+
         <LiveReading />
       </section>
 

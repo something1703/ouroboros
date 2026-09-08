@@ -8,6 +8,15 @@
         "value": "fraunces",
         "createdAt": "2026-09-06T03:49:18.638Z",
         "reason": "user confirmed: Fraunces was picked and approved as the brand display face in this session's earlier logo work, before this redesign; PRODUCT.md's Brand Commitments locks the type system as not open for revision here"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "web/src/components/marketing/LoopDiagram.tsx"
+        ],
+        "createdAt": "2026-09-08T07:39:36.008Z",
+        "reason": "SVG path strokeWidth transition, not a CSS box-model property -- never triggers layout reflow"
       }
     ]
   }

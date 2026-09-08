@@ -132,6 +132,21 @@ jobs:
           # strict allowlist-or-403 behavior.
           DASHBOARD_DEMO_OPEN_ACCESS: ${{ vars.DASHBOARD_DEMO_OPEN_ACCESS || '' }}
 
+      - name: Build + deploy web
+        # Found live (docs/DECISIONS.md): web/ was never in this workflow at all --
+        # every deploy of it, since it first went live, was a manual
+        # `gcloud builds submit` + `gcloud run deploy` run by hand. A real commit
+        # (the landing page's hero rebuild) sat live-but-not-actually-live for over
+        # an hour because pushing to main was silently *not* enough to ship it,
+        # unlike every other service. Build context is the repo root, not web/ --
+        # this image needs ouroboros_architecture.mermaid alongside web/ (see
+        # web/Dockerfile's own comment).
+        run: |
+          gcloud builds submit --config=web/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .
+          gcloud run deploy web --region="$OUROBOROS_REGION" \
+            --image="${OUROBOROS_REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/ouroboros/web:latest" \
+            --allow-unauthenticated
+
       - name: Build + deploy toolbox-public
         run: |
           gcloud builds submit --config=services/toolbox_public/cloudbuild.yaml --gcs-log-dir=gs://ouroboros-507503-artifacts-dev/cloudbuild-logs/ .

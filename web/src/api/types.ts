@@ -17,6 +17,14 @@ export interface CreateProjectRequest {
   project_id: string
   studio_id: string
   title: string
+  // All optional server-side (services/dashboard_api/main.py::CreateProjectRequest)
+  // but far from cosmetic: release_date drives the header's "to release" countdown,
+  // budget_cap_usd is the cap packages/parallel_client/cost.py actually enforces, and
+  // distribution_territories become each claim's legal `jurisdictions`.
+  release_date?: string | null // ISO date, e.g. "2026-10-10"
+  shooting_countries?: string[]
+  distribution_territories?: string[]
+  budget_cap_usd?: number
 }
 
 // "judge" is DASHBOARD_DEMO_OPEN_ACCESS-gated server-side (services/dashboard_api/

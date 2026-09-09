@@ -1,19 +1,12 @@
 import { useState } from "react"
+import { Plus } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createProject, listProjects } from "@/api/client"
+import { useQuery } from "@tanstack/react-query"
+import { listProjects } from "@/api/client"
+import { NewProjectDialog } from "@/components/NewProjectDialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Project } from "@/api/types"
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-}
 
 // Release date carries real urgency (it drives monitor cadence everywhere else in
 // this product), so the list ranks by it instead of sitting in an unordered tile
@@ -27,77 +20,9 @@ function sortByUrgency(projects: Project[]): Project[] {
   })
 }
 
-function NewProjectInline({ onDone }: { onDone: (projectId: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState("")
-  const [projectId, setProjectId] = useState("")
-  const [studioId, setStudioId] = useState("studio-1")
-  const [idTouched, setIdTouched] = useState(false)
-  const queryClient = useQueryClient()
-
-  const mutation = useMutation({
-    mutationFn: createProject,
-    onSuccess: (project) => {
-      void queryClient.invalidateQueries({ queryKey: ["projects"] })
-      onDone(project.project_id)
-    },
-  })
-
-  if (!open) {
-    return (
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        New project
-      </Button>
-    )
-  }
-
-  return (
-    <form
-      className="max-w-sm space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (!title.trim() || !projectId.trim() || !studioId.trim()) return
-        mutation.mutate({ project_id: projectId.trim(), studio_id: studioId.trim(), title: title.trim() })
-      }}
-    >
-      <Input
-        autoFocus
-        placeholder="Project title"
-        value={title}
-        onChange={(e) => {
-          setTitle(e.target.value)
-          if (!idTouched) setProjectId(slugify(e.target.value))
-        }}
-      />
-      <Input
-        placeholder="project-id"
-        value={projectId}
-        onChange={(e) => {
-          setIdTouched(true)
-          setProjectId(e.target.value)
-        }}
-        className="font-mono"
-      />
-      <Input placeholder="studio-id" value={studioId} onChange={(e) => setStudioId(e.target.value)} />
-      {mutation.isError && (
-        <p className="text-sm text-destructive">
-          {mutation.error instanceof Error ? mutation.error.message : "Couldn't create project"}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={mutation.isPending}>
-          Create
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  )
-}
-
 export function ProjectsPage() {
   const navigate = useNavigate()
+  const [creating, setCreating] = useState(false)
   const {
     data: projects,
     isLoading,
@@ -110,7 +35,19 @@ export function ProjectsPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-6 font-display text-3xl text-foreground">Projects</h1>
+      {/* The action lives in the page header rather than only in the empty state --
+          it used to disappear entirely as soon as you had one project. Suppressed
+          while the list is empty, where the empty state's own CTA says it better
+          and three competing "New project" buttons would just be noise. */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-3xl text-foreground">Projects</h1>
+        {projects && projects.length > 0 && (
+          <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+            <Plus className="size-4" />
+            New project
+          </Button>
+        )}
+      </div>
 
       {isLoading && (
         <div className="space-y-0 border-t border-border">
@@ -132,9 +69,19 @@ export function ProjectsPage() {
       )}
 
       {!isLoading && !isError && projects?.length === 0 && (
-        <div className="flex flex-col items-start gap-4">
-          <p className="text-sm text-muted-foreground">No projects yet.</p>
-          <NewProjectInline onDone={(id) => id && navigate(`/app/projects/${id}`)} />
+        <div className="flex flex-col items-start gap-4 border-t border-border pt-6">
+          <div className="max-w-[56ch] space-y-1.5">
+            <p className="text-base font-medium text-foreground">No projects yet</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              A project holds one production: its script and cut, every claim Ouroboros
+              extracts from them, and the monitors that keep watching those claims after
+              they're verified. Create one to start.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus className="size-4" />
+            New project
+          </Button>
         </div>
       )}
 
@@ -160,6 +107,16 @@ export function ProjectsPage() {
           ))}
         </ul>
       )}
+
+      <NewProjectDialog
+        open={creating}
+        onOpenChange={setCreating}
+        existingIds={projects?.map((p) => p.project_id) ?? []}
+        onCreated={(projectId) => {
+          setCreating(false)
+          navigate(`/app/projects/${projectId}`)
+        }}
+      />
     </div>
   )
 }

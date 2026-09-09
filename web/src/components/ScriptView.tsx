@@ -4,6 +4,7 @@ import * as pdfjsLib from "pdfjs-dist"
 import type { PDFDocumentProxy } from "pdfjs-dist"
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import { getAssetFile, getAssetTimeline } from "@/api/client"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { RiskLevel, TimelineClaim } from "@/api/types"
 
@@ -110,10 +111,19 @@ export function ScriptView({
 }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   const fileQuery = useQuery({
     queryKey: ["asset-file", assetId],
     queryFn: () => getAssetFile(assetId),
+    // The signed URL is valid for an hour (EXPORT_URL_TTL server-side) -- without
+    // this, React Query's default staleTime of 0 refetches on every remount/focus,
+    // minting a fresh signed URL and re-running the pdf.js load below each time.
+    // Found live: two back-to-back CORS failures a few seconds apart in the
+    // console, each carrying a different signature -- not one failure logged
+    // twice, but the fetch genuinely retried itself before the actual bug (no
+    // CORS policy on the bucket) was fixed.
+    staleTime: 5 * 60 * 1000,
   })
   const timelineQuery = useQuery({
     queryKey: ["asset-timeline", assetId],
@@ -123,18 +133,32 @@ export function ScriptView({
   useEffect(() => {
     if (!fileQuery.data) return
     let cancelled = false
+    setLoadError(null)
     void pdfjsLib
       .getDocument({ url: fileQuery.data.url })
       .promise.then((doc) => {
         if (!cancelled) setPdf(doc)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Couldn't load script")
+        if (cancelled) return
+        // A CORS/network failure throws a bare `TypeError: Failed to fetch` --
+        // real, but not something a reader should have to parse. Anything else
+        // (a genuinely malformed PDF, pdf.js's own parse errors) keeps its own
+        // message, which is at least specific to what went wrong.
+        const message =
+          err instanceof TypeError
+            ? "Couldn't reach the file. It may not have finished uploading, or the link expired."
+            : err instanceof Error
+              ? err.message
+              : "Couldn't load this script."
+        setLoadError(message)
       })
     return () => {
       cancelled = true
     }
-  }, [fileQuery.data])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAttempt is a
+    // deliberate manual retrigger, not a data dependency to react to on its own.
+  }, [fileQuery.data, loadAttempt])
 
   const claimsByPage = new Map<number, TimelineClaim[]>()
   for (const claim of timelineQuery.data?.claims ?? []) {
@@ -147,6 +171,7 @@ export function ScriptView({
   if (fileQuery.isLoading || timelineQuery.isLoading) {
     return (
       <div className="space-y-3 p-6">
+        <p className="text-sm text-muted-foreground">Loading script…</p>
         <Skeleton className="h-96 w-full" />
       </div>
     )
@@ -154,15 +179,30 @@ export function ScriptView({
 
   if (fileQuery.isError || loadError) {
     return (
-      <p className="p-6 text-sm text-destructive">
-        {loadError ?? "Couldn't load the script asset."}
-      </p>
+      <div className="flex flex-col items-start gap-3 p-6">
+        <p className="text-sm text-destructive">
+          {loadError ?? "Couldn't load the script asset."}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setLoadError(null)
+            setPdf(null)
+            void fileQuery.refetch()
+            setLoadAttempt((n) => n + 1)
+          }}
+        >
+          Try again
+        </Button>
+      </div>
     )
   }
 
   if (!pdf) {
     return (
       <div className="space-y-3 p-6">
+        <p className="text-sm text-muted-foreground">Rendering pages…</p>
         <Skeleton className="h-96 w-full" />
       </div>
     )

@@ -275,8 +275,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
             </p>
           )}
 
-          {/* The risk worklist outranks exports -- it's this page's actual point,
-              per DESIGN.md's own description of the product. */}
+          <ExportsPanel projectId={projectId} />
+
           <section>
             <div className="mb-3 flex items-baseline justify-between">
               <h2 className="text-base font-medium text-foreground">All claims</h2>
@@ -304,8 +304,6 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               </ul>
             )}
           </section>
-
-          <ExportsPanel projectId={projectId} />
         </TabsContent>
 
         {latestScript && (

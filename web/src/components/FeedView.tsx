@@ -74,9 +74,13 @@ export function FeedView({
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-[52ch] text-sm text-muted-foreground">
           {events.length === 0
-            ? "No events yet."
+            ? // A bare "No events yet." reads as broken on a project that's never
+              // had a claim verified -- this feed only fills once a claim has
+              // been through CLEAR/TRUE CUT and a monitor has had something to
+              // report on, which for a fresh project can genuinely be never yet.
+              "No events yet. This fills in once a claim is verified and its monitor reports something — running CLEAR or TRUE CUT is what starts that."
             : `No “${filter === "all" ? "all" : KIND_LABELS[filter]}” events yet.`}
         </p>
       )}

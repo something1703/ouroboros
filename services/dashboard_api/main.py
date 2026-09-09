@@ -30,7 +30,7 @@ from packages.claims.models import Asset, Claim, Evidence, Project, Risk, Segmen
 from packages.common.errors import Conflict, NotFound
 from packages.common.logging import get_logger
 from packages.common.tracing import configure_tracing, flush_tracing, instrument_fastapi
-from packages.exports.clearance_sheet import export_clearance_sheet
+from packages.exports.clearance_csv import generate_clearance_csv
 from packages.exports.eo_pdf import generate_eo_pack
 from packages.exports.factcheck_pdf import generate_factcheck_report
 from packages.ledger.db import session_scope
@@ -706,7 +706,7 @@ def export_eo_pack(
     exports are read-only, not a business-state change like starting a run)."""
     with session_scope() as session:
         pdf_bytes = generate_eo_pack(session, project_id)
-    url = _upload_export_pdf(project_id, "eo-pack.pdf", pdf_bytes)
+    url = _upload_export_bytes(project_id, "eo-pack.pdf", pdf_bytes, "application/pdf")
     return ExportResponse(url=url)
 
 
@@ -717,28 +717,33 @@ def export_factcheck_report(
     """PHASE_08.md §8.5: timecode-ordered fact-check report PDF."""
     with session_scope() as session:
         pdf_bytes = generate_factcheck_report(session, project_id)
-    url = _upload_export_pdf(project_id, "factcheck-report.pdf", pdf_bytes)
+    url = _upload_export_bytes(project_id, "factcheck-report.pdf", pdf_bytes, "application/pdf")
     return ExportResponse(url=url)
 
 
-@app.post("/projects/{project_id}/exports/clearance-sheet", response_model=ExportResponse)
+@app.post("/projects/{project_id}/exports/clearance-log", response_model=ExportResponse)
 def export_clearance_log(
     project_id: str, _user: UserContext = Depends(get_current_user)
 ) -> ExportResponse:
-    """PHASE_08.md §8.5: clearance log exported to a Google Sheet (idempotent --
-    `packages/exports/clearance_sheet.py` updates the same sheet on repeat calls)."""
+    """PHASE_08.md §8.5: clearance log, one row per legal claim, as a CSV -- not a
+    live Google Sheet (docs/DECISIONS.md: `sa-dashboard-api` has no Google Workspace
+    license, so it has zero Drive storage quota and can never own a newly created
+    Sheet; every real attempt 403'd). Regenerated fresh on every call, same as the
+    two PDF exports below -- a CSV has no "same file, updated in place" to be
+    idempotent about."""
     with session_scope() as session:
-        url = export_clearance_sheet(session, project_id)
+        csv_bytes = generate_clearance_csv(session, project_id)
+    url = _upload_export_bytes(project_id, "clearance-log.csv", csv_bytes, "text/csv")
     return ExportResponse(url=url)
 
 
-def _upload_export_pdf(project_id: str, filename: str, pdf_bytes: bytes) -> str:
+def _upload_export_bytes(project_id: str, filename: str, data: bytes, content_type: str) -> str:
     bucket_name = os.environ.get(
         "ARTIFACTS_BUCKET", f"{os.environ['GOOGLE_CLOUD_PROJECT']}-artifacts-dev"
     )
     object_name = f"exports/{project_id}/{filename}"
     storage.Client().bucket(bucket_name).blob(object_name).upload_from_string(
-        pdf_bytes, content_type="application/pdf"
+        data, content_type=content_type
     )
     return _generate_signed_url(bucket_name, object_name, method="GET", expiration=EXPORT_URL_TTL)
 

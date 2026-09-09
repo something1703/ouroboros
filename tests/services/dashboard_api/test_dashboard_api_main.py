@@ -571,8 +571,11 @@ def test_export_eo_pack_uploads_and_signs(
     monkeypatch.setattr(dashboard_api, "generate_eo_pack", lambda *_a, **_kw: b"%PDF-fake")
     monkeypatch.setattr(
         dashboard_api,
-        "_upload_export_pdf",
-        lambda project_id, filename, _pdf_bytes: f"https://signed.example/{project_id}/{filename}",
+        "_upload_export_bytes",
+        lambda project_id,
+        filename,
+        _data,
+        _content_type: f"https://signed.example/{project_id}/{filename}",
     )
 
     response = client.post("/projects/demo/exports/eo-pack")
@@ -588,8 +591,11 @@ def test_export_factcheck_report_uploads_and_signs(
     monkeypatch.setattr(dashboard_api, "generate_factcheck_report", lambda *_a, **_kw: b"%PDF-fake")
     monkeypatch.setattr(
         dashboard_api,
-        "_upload_export_pdf",
-        lambda project_id, filename, _pdf_bytes: f"https://signed.example/{project_id}/{filename}",
+        "_upload_export_bytes",
+        lambda project_id,
+        filename,
+        _data,
+        _content_type: f"https://signed.example/{project_id}/{filename}",
     )
 
     response = client.post("/projects/demo/exports/factcheck-report")
@@ -597,20 +603,27 @@ def test_export_factcheck_report_uploads_and_signs(
     assert response.json() == {"url": "https://signed.example/demo/factcheck-report.pdf"}
 
 
-def test_export_clearance_sheet_returns_sheet_url(
+def test_export_clearance_log_returns_csv_url(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # No live Google Sheet -- docs/DECISIONS.md: sa-dashboard-api has no Workspace
+    # license and cannot create Drive-backed files, so this is a CSV upload now,
+    # exactly the same shape as the two PDF exports above.
     _seed_project(db_session)
     _as("iamrudra1703@gmail.com", "producer")
+    monkeypatch.setattr(dashboard_api, "generate_clearance_csv", lambda *_a, **_kw: b"Scene,Page\n")
     monkeypatch.setattr(
         dashboard_api,
-        "export_clearance_sheet",
-        lambda *_a, **_kw: "https://docs.google.com/spreadsheets/d/sheet-123",
+        "_upload_export_bytes",
+        lambda project_id,
+        filename,
+        _data,
+        _content_type: f"https://signed.example/{project_id}/{filename}",
     )
 
-    response = client.post("/projects/demo/exports/clearance-sheet")
+    response = client.post("/projects/demo/exports/clearance-log")
     assert response.status_code == 200
-    assert response.json() == {"url": "https://docs.google.com/spreadsheets/d/sheet-123"}
+    assert response.json() == {"url": "https://signed.example/demo/clearance-log.csv"}
 
 
 def test_asset_timeline_requires_auth(client: TestClient, db_session: Session) -> None:

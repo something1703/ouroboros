@@ -108,7 +108,6 @@ module = [
     "google.cloud.pubsub_v1",
     "google.cloud.pubsub_v1.*",
     "reportlab.*",
-    "googleapiclient.*",
 ]
 ignore_missing_imports = true
 

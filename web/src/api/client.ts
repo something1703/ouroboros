@@ -179,6 +179,6 @@ export function exportFactcheckReport(projectId: string): Promise<ExportResponse
   return request(`/projects/${projectId}/exports/factcheck-report`, { method: "POST" })
 }
 
-export function exportClearanceSheet(projectId: string): Promise<ExportResponse> {
-  return request(`/projects/${projectId}/exports/clearance-sheet`, { method: "POST" })
+export function exportClearanceLog(projectId: string): Promise<ExportResponse> {
+  return request(`/projects/${projectId}/exports/clearance-log`, { method: "POST" })
 }

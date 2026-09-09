@@ -66,6 +66,9 @@ module "storage" {
   project_id = var.project_id
   region     = var.region
   env        = var.env
+  # Matches CORS_ALLOWED_ORIGINS on dashboard-api (.github/workflows/deploy.yml) --
+  # the same two origins that need to reach the API also need to reach GCS directly.
+  cors_origins = ["http://localhost:5173", "https://web-492372502792.us-central1.run.app"]
 
   depends_on = [module.project_services]
 }

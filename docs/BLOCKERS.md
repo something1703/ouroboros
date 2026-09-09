@@ -16,7 +16,7 @@ Format per entry:
 **Tried:** `git ls-remote` and `git clone` against `https://github.com/something1703/ouroboros.git` — succeeded via a credential already saved in the local macOS keychain, confirming push access and that the repo is empty. An anonymous (unauthenticated) call to `https://api.github.com/repos/something1703/ouroboros` returned 404.
 **Error / gap:** A 404 on the anonymous API call is consistent with the repo being private (or not yet indexed); I have no GitHub API token to check `visibility` directly, and I should not extract one from the keychain without being asked.
 **Need from human:** Confirm in GitHub → repo → Settings → General that visibility is **Public**, and that a license shows in the About sidebar once `LICENSE` is pushed (hackathon rule: repo must be public with a visible OSI license).
-**Status:** open
+**Status:** resolved (2026-09-10) — verified via `gh repo view`: `"visibility": "PUBLIC"`, `licenseInfo.key: "apache-2.0"`. Both hackathon requirements (public repo, visible OSI license) are met.
 
 ---
 ## [PHASE 1.8] Parallel balance check needs OAuth, not the API key            (opened: 2026-09-03 10:50 IST)

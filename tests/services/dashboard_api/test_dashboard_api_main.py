@@ -572,10 +572,9 @@ def test_export_eo_pack_uploads_and_signs(
     monkeypatch.setattr(
         dashboard_api,
         "_upload_export_bytes",
-        lambda project_id,
-        filename,
-        _data,
-        _content_type: f"https://signed.example/{project_id}/{filename}",
+        lambda project_id, filename, _data, _content_type: (
+            f"https://signed.example/{project_id}/{filename}"
+        ),
     )
 
     response = client.post("/projects/demo/exports/eo-pack")
@@ -592,10 +591,9 @@ def test_export_factcheck_report_uploads_and_signs(
     monkeypatch.setattr(
         dashboard_api,
         "_upload_export_bytes",
-        lambda project_id,
-        filename,
-        _data,
-        _content_type: f"https://signed.example/{project_id}/{filename}",
+        lambda project_id, filename, _data, _content_type: (
+            f"https://signed.example/{project_id}/{filename}"
+        ),
     )
 
     response = client.post("/projects/demo/exports/factcheck-report")
@@ -615,10 +613,9 @@ def test_export_clearance_log_returns_csv_url(
     monkeypatch.setattr(
         dashboard_api,
         "_upload_export_bytes",
-        lambda project_id,
-        filename,
-        _data,
-        _content_type: f"https://signed.example/{project_id}/{filename}",
+        lambda project_id, filename, _data, _content_type: (
+            f"https://signed.example/{project_id}/{filename}"
+        ),
     )
 
     response = client.post("/projects/demo/exports/clearance-log")

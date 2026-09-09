@@ -1,7 +1,7 @@
 // PHASE_08.md §8.4: a chat drawer on the project page for grounded Q&A over the claim
 // ledger, the studio's private corpus, and live web search (services/dashboard_api's
 // POST /projects/{id}/ask, synchronous -- unlike /runs's polled run_id).
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import ReactMarkdown from "react-markdown"
 import type { Components } from "react-markdown"
@@ -18,6 +18,40 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 
 const GUARDRAIL_LINE = "Evidence, not legal advice."
+
+// Real, not a guess: the last two live /ask calls in production took 73s and 113s
+// (checked via Cloud Logging httpRequest.latency) -- this is a synchronous call all
+// the way down to the agent (Vertex AI Search + the claim ledger + a live Parallel
+// search), not a quick lookup. A bare spinner with no time expectation reads as
+// broken well before a minute is up.
+const WAIT_MESSAGES: { afterSeconds: number; text: string }[] = [
+  { afterSeconds: 0, text: "Reading the claim ledger and studio precedent…" },
+  { afterSeconds: 15, text: "Searching the live web through Parallel…" },
+  { afterSeconds: 40, text: "Still researching — grounded answers can take up to two minutes." },
+  { afterSeconds: 80, text: "Almost there — writing up the answer with citations." },
+]
+
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0)
+      return
+    }
+    const start = Date.now()
+    const interval = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [active])
+  return seconds
+}
+
+function waitMessageFor(seconds: number): string {
+  let message = WAIT_MESSAGES[0].text
+  for (const entry of WAIT_MESSAGES) {
+    if (seconds >= entry.afterSeconds) message = entry.text
+  }
+  return message
+}
 
 const EXAMPLE_PROMPTS = [
   "Can we show a Pepsi sign in the Mumbai scene?",
@@ -107,6 +141,8 @@ export function AskDrawer({
     askMutation.mutate(trimmed)
   }
 
+  const waitSeconds = useElapsedSeconds(askMutation.isPending)
+
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
       <SheetContent side="right" className="flex w-full flex-col sm:max-w-lg">
@@ -151,8 +187,13 @@ export function AskDrawer({
           ))}
 
           {askMutation.isPending && (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-2/3" />
+            <div className="space-y-3 border-t border-border pt-4 first:border-0 first:pt-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">{waitMessageFor(waitSeconds)}</p>
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  {waitSeconds}s
+                </span>
+              </div>
               <Skeleton className="h-16 w-full" />
             </div>
           )}

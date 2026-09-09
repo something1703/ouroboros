@@ -129,7 +129,7 @@ function EventRow({
   const content = (
     <div className="flex items-start gap-3 border-b border-border py-2.5 last:border-0">
       <span className="shrink-0 font-mono text-xs text-muted-foreground">
-        {new Date(event.at).toLocaleString()}
+        {new Date(event.at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm text-foreground">

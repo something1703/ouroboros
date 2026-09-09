@@ -62,28 +62,53 @@ export function DriftHero({ title, metrics }: { title: string; metrics: MetricsR
   const daysLabel = metrics.days_to_release >= 999 ? "—" : `${metrics.days_to_release}d`
   const drift7d = metrics.drift_7d != null ? `${Math.round(metrics.drift_7d * 100)}%` : "—"
 
+  const driftZero = metrics.reality_drift === 0
+
   return (
-    <header className="flex flex-wrap items-center gap-x-10 gap-y-6 border-b border-border bg-card px-6 py-8">
-      <DriftRing value={metrics.reality_drift} />
-      <div className="min-w-0 flex-1">
-        <h1 className="font-display text-3xl text-foreground sm:text-4xl">{title}</h1>
-        <div className="mt-6 flex flex-wrap items-baseline gap-x-10 gap-y-4">
-          <Instrument label="Drift, 7 days" value={drift7d} />
-          <Instrument label="Spend" value={spend} />
-          <Instrument label="To release" value={daysLabel} />
-          <div>
-            {/* Mono carries the cadence code, which is a measurement. The word
-                describing it is body sans in title case, per the same rule. */}
-            <p className="text-xl text-foreground">
-              <span className="font-mono">{metrics.current_cadence}</span>{" "}
-              <span className="text-muted-foreground">
-                {CADENCE_LABEL[metrics.current_cadence]}
-              </span>
-            </p>
-            <p className="mt-0.5 text-sm text-muted-foreground">Monitor cadence</p>
+    <header className="border-b border-border bg-card px-6 py-6 sm:py-8">
+      <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
+        <DriftRing value={metrics.reality_drift} />
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display text-2xl text-foreground sm:text-4xl">{title}</h1>
+          {/* A single vertical stack of 4 instruments cost ~500px of mobile height
+              on its own, before any tab content -- one claim was visible before the
+              fold. 2-up on mobile, the original single row from sm and up. */}
+          <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:mt-6 sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-10 sm:gap-y-4">
+            <Instrument label="Drift, 7 days" value={drift7d} />
+            <Instrument label="Spend" value={spend} />
+            <Instrument label="To release" value={daysLabel} />
+            <div>
+              {/* Mono carries the cadence code, which is a measurement. The word
+                  describing it is body sans in title case, per the same rule. */}
+              <p className="text-xl text-foreground">
+                <span className="font-mono">{metrics.current_cadence}</span>{" "}
+                <span className="text-muted-foreground">
+                  {CADENCE_LABEL[metrics.current_cadence]}
+                </span>
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">Monitor cadence</p>
+            </div>
           </div>
         </div>
       </div>
+      {/* A bare "0%" reads as broken to anyone who hasn't read the docs -- the one
+          instrument on the page that must never look like it's lying about itself.
+          Only shown for a genuinely zero, measured reading (not the "—" unmeasured
+          state, which already says so via DriftRing itself). Full explanation from
+          sm up; a one-line version on mobile, where every extra line here is a line
+          the worklist -- this page's actual point -- loses on first paint. */}
+      {driftZero && (
+        <>
+          <p className="mt-4 text-sm text-muted-foreground sm:hidden">
+            No monitor has caught a real change yet — not because nothing is running.
+          </p>
+          <p className="mt-6 hidden max-w-[62ch] text-sm text-muted-foreground sm:block">
+            Zero because no monitor has caught a real change yet on this project — not because
+            nothing is running. Every verified claim has a Parallel Monitor watching it live; a
+            quiet monitor is a claim that's still true.
+          </p>
+        </>
+      )}
     </header>
   )
 }

@@ -323,7 +323,12 @@ export function ClaimDrawer({
                   <ul className="space-y-1.5">
                     {detail.history.map((event) => (
                       <li key={event.event_id} className="text-muted-foreground">
-                        <span className="font-mono">{new Date(event.at).toLocaleString()}</span>{" "}
+                        <span className="font-mono">
+                          {new Date(event.at).toLocaleString(undefined, {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </span>{" "}
                         — {event.actor}: {event.from_status ?? "—"} → {event.to_status}
                         {event.note && <span className="italic"> ({event.note})</span>}
                       </li>

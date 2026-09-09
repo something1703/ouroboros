@@ -25,10 +25,12 @@ locals {
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "cloudtrace.googleapis.com",
+    # No longer used: the clearance-log export was a Google Sheet until it turned out
+    # a bare service account has no Drive storage quota and can never own a file it
+    # creates (a real 403, see docs/DECISIONS.md) -- it writes a CSV to GCS now.
+    # Left enabled rather than removed: disabling an API is a destroy operation, and
+    # these cost nothing while idle. Safe to drop in a later, non-demo-adjacent pass.
     "sheets.googleapis.com",
-    # PHASE_08.md §8.5: the clearance-log export shares its created Sheet link-
-    # accessible via the Drive API's permissions.create -- Sheets API alone manages
-    # the spreadsheet's cells, but setting who can open the file is a Drive API call.
     "drive.googleapis.com",
     # PHASE_09.md §9.3: deploys infra/firestore.rules (google_firebaserules_ruleset/
     # _release below) -- Firestore security rules are a Firebase Rules API resource.

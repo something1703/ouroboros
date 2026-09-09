@@ -98,7 +98,7 @@ flowchart LR
     subgraph UI["7 · PRESENTATION & GOVERNANCE"]
         AUTH["Google Identity Services<br/>role allowlist: Legal · Editorial ·<br/>Producer · open-access Judge"]
         DASH["Cloud Run · Dashboard<br/>script risk heatmap ·<br/>video claim timeline ·<br/>live monitor feed · Reality Drift"]
-        EXPORT["Exports<br/>E&O evidence pack (PDF) ·<br/>clearance log → Google Sheets"]
+        EXPORT["Exports<br/>E&O evidence pack (PDF) ·<br/>fact-check report (PDF) ·<br/>clearance log (CSV)"]
         LIVE["Gemini Live API<br/>on-set voice Q&A (stretch)"]
         OBS["Cloud Logging / Trace<br/>per-claim observability"]
         AUTH --> DASH --> EXPORT

@@ -4,7 +4,12 @@
 >
 > Built for *Agentic Cinema: The Blockbuster Hackathon* — **Parallel track**.
 
-**Live:** [web-492372502792.us-central1.run.app](https://web-492372502792.us-central1.run.app) · **Demo video:** _(link goes here once recorded — see `docs/DEMO_SCRIPT.md` for the shot list)_ · **Docs on the live site:** [/docs](https://web-492372502792.us-central1.run.app/docs)
+**Live app:** [web-492372502792.us-central1.run.app](https://web-492372502792.us-central1.run.app)
+· **Architecture:** [/docs/architecture](https://web-492372502792.us-central1.run.app/docs/architecture)
+· **How it works:** [/how-it-works](https://web-492372502792.us-central1.run.app/how-it-works)
+· **Full write-up:** [/docs](https://web-492372502792.us-central1.run.app/docs)
+
+**Demo video:** _recorded for submission — see [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the shot list._
 
 Any Google account can sign in and get full demo access — see [Access for judges](#access-for-judges) below.
 
@@ -125,7 +130,7 @@ flowchart LR
     subgraph UI["7 · PRESENTATION & GOVERNANCE"]
         AUTH["Google Identity Services<br/>role allowlist: Legal · Editorial ·<br/>Producer · open-access Judge"]
         DASH["Cloud Run · Dashboard<br/>script risk heatmap ·<br/>video claim timeline ·<br/>live monitor feed · Reality Drift"]
-        EXPORT["Exports<br/>E&O evidence pack (PDF) ·<br/>clearance log → Google Sheets"]
+        EXPORT["Exports<br/>E&O evidence pack (PDF) ·<br/>fact-check report (PDF) ·<br/>clearance log (CSV)"]
         LIVE["Gemini Live API<br/>on-set voice Q&A (stretch — not attempted)"]
         OBS["Cloud Logging / Trace<br/>per-claim observability"]
         AUTH --> DASH --> EXPORT

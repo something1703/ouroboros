@@ -31,14 +31,15 @@ web/tmp/
 web/src/App.css
 web/src/App.tsx.orig_check
 
-# impeccable (design skill): machine-local consent + session-scoped cache with
-# absolute local paths -- .impeccable/config.json and surfaces/ are shared, tracked
-.impeccable/config.local.json
-.impeccable/hook.cache.json
-# ...and its per-platform compiled binary -- a downloaded dependency artifact, not
-# source (12MB+, darwin-arm64-only); `npx impeccable install` re-fetches it per clone
-.claude/skills/impeccable/scripts/bin/
-.github/skills/impeccable/scripts/bin/
+# Local agent/design tooling (Claude Code skills, the impeccable design skill and
+# its per-surface cache). Developer-machine tooling, not part of the product -- kept
+# on disk so the local commands keep working, just out of the product repo.
+.claude/
+.impeccable/
+.github/agents/
+.github/hooks/
+.github/skills/
+web/.impeccable/
 web/src/assets/
 
 # Env / secrets
